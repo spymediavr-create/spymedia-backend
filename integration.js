@@ -6,16 +6,20 @@ const YOUTUBE_API_URL = 'https://spymedia-backend.onrender.com/api';
  */
 async function loadPortfolioVideos() {
   try {
-    console.log("📡 데이터 불러오기 시작...");
+    console.log("📡 데이터 불러오기 및 최신순 정렬 시작...");
     const response = await fetch(`${YOUTUBE_API_URL}/videos`);
     
     if (!response.ok) throw new Error("네트워크 응답 에러");
     
     const data = await response.json();
-    
-    // --- 핵심 수정 부분: data.videos에서 영상을 꺼내옵니다 ---
-    const videos = data.videos || []; 
-    // --------------------------------------------------
+    let videos = data.videos || []; 
+
+    // --- 최신 날짜순 정렬 로직 추가 ---
+    videos.sort((a, b) => {
+      // publishedAt 값을 비교하여 최신 날짜가 앞으로 오게 정렬
+      return new Date(b.publishedAt) - new Date(a.publishedAt);
+    });
+    // --------------------------------
 
     const container = document.querySelector('.vgrid');
     
@@ -24,11 +28,10 @@ async function loadPortfolioVideos() {
       container.querySelectorAll('.vcard[data-source="youtube"]').forEach(c => c.remove());
       
       videos.forEach(v => {
+        // 정렬된 순서대로 카드 생성 및 추가
         container.appendChild(createVideoCard(v));
       });
-      console.log(`✅ ${videos.length}개의 영상이 화면에 추가되었습니다.`);
-    } else {
-      console.warn("⚠️ 표시할 영상 데이터가 없습니다.");
+      console.log(`✅ ${videos.length}개의 영상이 최신순으로 정렬되었습니다.`);
     }
   } catch (e) {
     console.error("❌ 데이터 로드 실패:", e);
