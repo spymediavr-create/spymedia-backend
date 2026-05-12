@@ -9,7 +9,7 @@
  */
 
 // API 설정
-const YOUTUBE_API_URL = 'https://spymedia.onrender.com/api'; // Render 배포 URL로 변경
+const YOUTUBE_API_URL = 'https://spymedia-backend.onrender.com/api'; // Render 배포 URL로 변경
 // 로컬 테스트: const YOUTUBE_API_URL = 'http://localhost:3000/api';
 
 // 카테고리 매핑
