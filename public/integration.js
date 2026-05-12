@@ -86,35 +86,45 @@ function displayPortfolioCards(videos) {
 }
 
 /**
- * 영상 카드 생성
+ * 영상 카드 생성 (해시태그 파싱 로직 추가)
  */
 function createVideoCard(video) {
   const card = document.createElement('div');
-  card.className = 'vcard';
+  card.className = 'vcard'; // HTML 스타일과 일치
   card.setAttribute('data-source', 'youtube');
-  card.setAttribute('data-video-id', video.videoId);
-  card.setAttribute('data-categories', video.categories.join(','));
+  
+  // --- 해시태그 파싱 로직 추가 ---
+  let assignedTag = 'etc'; // 기본값 (기업홍보)
+  const title = video.title;
+
+  if (title.includes('#부동산')) assignedTag = 'real';
+  else if (title.includes('#FPV') || title.includes('#씨네후프')) assignedTag = 'fpv';
+  else if (title.includes('#관광지')) assignedTag = 'tour';
+  else if (title.includes('#보안')) assignedTag = 'security';
+  else if (title.includes('#매핑') || title.includes('#VR')) assignedTag = 'map';
+
+  // HTML의 fTab 함수와 호환되도록 data-tag 속성 설정
+  card.setAttribute('data-tag', assignedTag);
+  // ------------------------------
+
   card.onclick = () => openV(video.videoId);
 
-  // 메인 카테고리 (첫 번째 카테고리)
-  const mainCategory = video.categories[0] || 'all';
-  const categoryLabel = CATEGORY_MAP[mainCategory] || mainCategory;
+  const categoryLabel = CATEGORY_MAP[assignedTag] || 'AERIAL VIDEO';
 
   card.innerHTML = `
-    <img src="${video.thumbnail}" alt="${video.title}" loading="lazy">
+    <img src="${video.thumbnail}" alt="${title}" loading="lazy">
     <div class="vcard-hud"></div>
     <div class="vcard-br"></div>
     <div class="vcard-play"><div class="vcard-play-ic">▶</div></div>
-    <div class="vcard-coord">YouTube Video</div>
+    <div class="vcard-coord">N 37.37° E 126.80°</div>
     <div class="vcard-info">
       <div class="vcard-cat">${categoryLabel}</div>
-      <div class="vcard-title">${truncateTitle(video.title, 50)}</div>
+      <div class="vcard-title">${truncateTitle(title.split('#')[0], 50)}</div>
     </div>
   `;
 
   return card;
 }
-
 /**
  * 제목 길이 제한
  */
