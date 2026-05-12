@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: spymedia-youtube-automation
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: YOUTUBE_API_KEY
+        scope: build,runtime
+        generateValue: false
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production

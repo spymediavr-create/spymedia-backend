@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpyMedia YouTube Automation - API 테스트</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: linear-gradient(135deg, #001a33 0%, #003366 100%);
+      color: #e8f8ff;
+      padding: 2rem;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 2rem;
+      font-size: 2.5rem;
+      color: #00ccff;
+      text-shadow: 0 0 20px rgba(0, 204, 255, 0.5);
+    }
+
+    .controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: #00aaff;
+      color: white;
+      border: none;
+      padding: 0.8rem 1.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.3s;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #00ccff;
+      box-shadow: 0 0 20px rgba(0, 204, 255, 0.5);
+    }
+
+    .filter {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    .filter button {
+      padding: 0.6rem 1rem;
+      font-size: 0.9rem;
+    }
+
+    .filter button.active {
+      background: #00ff88;
+      color: #001a33;
+    }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .video-card {
+      background: rgba(0, 20, 40, 0.6);
+      border: 2px solid rgba(0, 204, 255, 0.3);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+
+    .video-card:hover {
+      border-color: #00ccff;
+      box-shadow: 0 0 20px rgba(0, 204, 255, 0.3);
+      transform: translateY(-5px);
+    }
+
+    .video-thumbnail {
+      width: 100%;
+      height: 170px;
+      object-fit: cover;
+      background: #000d1a;
+    }
+
+    .video-info {
+      padding: 1rem;
+    }
+
+    .video-title {
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+      color: #00ccff;
+      font-size: 1rem;
+    }
+
+    .video-date {
+      font-size: 0.85rem;
+      color: #a8d8f0;
+      margin-bottom: 0.5rem;
+    }
+
+    .video-hashtags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .hashtag {
+      background: rgba(0, 170, 255, 0.2);
+      color: #00ff88;
+      padding: 0.2rem 0.6rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+    }
+
+    .video-categories {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
+
+    .category {
+      background: rgba(0, 255, 136, 0.2);
+      color: #00ff88;
+      padding: 0.2rem 0.6rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 2px solid rgba(0, 204, 255, 0.2);
+    }
+
+    .stat-box {
+      background: rgba(0, 20, 40, 0.6);
+      border-left: 4px solid #00ccff;
+      padding: 1rem;
+      border-radius: 4px;
+    }
+
+    .stat-label {
+      color: #a8d8f0;
+      font-size: 0.9rem;
+    }
+
+    .stat-value {
+      color: #00ff88;
+      font-size: 2rem;
+      font-weight: bold;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #00ccff;
+    }
+
+    .spinner {
+      border: 4px solid rgba(0, 204, 255, 0.2);
+      border-top: 4px solid #00ccff;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .error {
+      background: rgba(255, 170, 0, 0.1);
+      border: 2px solid #ffaa00;
+      color: #ffaa00;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+    }
+
+    .success {
+      background: rgba(0, 255, 136, 0.1);
+      border: 2px solid #00ff88;
+      color: #00ff88;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 SpyMedia YouTube 자동화</h1>
+
+    <div class="controls">
+      <button onclick="loadVideos()">📺 모든 영상 로드</button>
+      <button onclick="refreshVideos()">🔄 새로고침</button>
+      <button onclick="loadCategories()">📂 카테고리 로드</button>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="filter" id="filterButtons"></div>
+
+    <div id="loading" class="loading" style="display: none;">
+      <div class="spinner"></div>
+      <p>영상을 불러오는 중...</p>
+    </div>
+
+    <div class="video-grid" id="videoGrid"></div>
+
+    <div class="stats">
+      <div class="stat-box">
+        <div class="stat-label">전체 영상</div>
+        <div class="stat-value" id="totalVideos">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">카테고리 수</div>
+        <div class="stat-value" id="totalCategories">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">마지막 업데이트</div>
+        <div class="stat-value" id="lastUpdate">-</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000/api';
+    let allVideos = [];
+    let categories = [];
+
+    async function loadVideos() {
+      try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('status').innerHTML = '';
+
+        const response = await fetch(`${API_URL}/videos?tag=all`);
+        const data = await response.json();
+
+        if (data.success) {
+          allVideos = data.videos;
+          displayVideos(allVideos);
+
+          document.getElementById('totalVideos').textContent = data.count;
+          document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ko-KR');
+
+          document.getElementById('status').innerHTML = `
+            <div class="success">✅ ${data.count}개의 영상을 로드했습니다!</div>
+          `;
+        }
+      } catch (error) {
+        console.error('오류:', error);
+        document.getElementById('status').innerHTML = `
+          <div class="error">❌ 오류: ${error.message}</div>
+        `;
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    async function loadCategories() {
+      try {
+        const response = await fetch(`${API_URL}/categories`);
+        const data = await response.json();
+
+        if (data.success) {
+          categories = data.categories;
+          document.getElementById('totalCategories').textContent = categories.length;
+
+          const filterHTML = categories.map(cat => `
+            <button onclick="filterByCategory('${cat.id}')" class="filter-btn" data-category="${cat.id}">
+              ${cat.label}
+            </button>
+          `).join('');
+
+          document.getElementById('filterButtons').innerHTML = filterHTML;
+          document.querySelector('[data-category="all"]').classList.add('active');
+        }
+      } catch (error) {
+        console.error('카테고리 로드 오류:', error);
+      }
+    }
+
+    async function filterByCategory(category) {
+      try {
+        document.getElementById('loading').style.display = 'block';
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        document.querySelector(`[data-category="${category}"]`).classList.add('active');
+
+        const response = await fetch(`${API_URL}/videos?tag=${category}`);
+        const data = await response.json();
+
+        if (data.success) {
+          displayVideos(data.videos);
+          document.getElementById('status').innerHTML = `
+            <div class="success">✅ ${data.count}개의 영상 (카테고리: ${data.tag})</div>
+          `;
+        }
+      } catch (error) {
+        document.getElementById('status').innerHTML = `
+          <div class="error">❌ 오류: ${error.message}</div>
+        `;
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    async function refreshVideos() {
+      try {
+        document.getElementById('loading').style.display = 'block';
+
+        const response = await fetch(`${API_URL}/refresh`);
+        const data = await response.json();
+
+        if (data.success) {
+          document.getElementById('status').innerHTML = `
+            <div class="success">✅ ${data.message} (${data.count}개 영상)</div>
+          `;
+          await loadVideos();
+        }
+      } catch (error) {
+        document.getElementById('status').innerHTML = `
+          <div class="error">❌ 새로고침 오류: ${error.message}</div>
+        `;
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+      }
+    }
+
+    function displayVideos(videos) {
+      const grid = document.getElementById('videoGrid');
+      grid.innerHTML = videos.map(video => `
+        <div class="video-card" onclick="openVideo('${video.videoId}')">
+          <img src="${video.thumbnail}" alt="${video.title}" class="video-thumbnail">
+          <div class="video-info">
+            <div class="video-title">${video.title}</div>
+            <div class="video-date">${new Date(video.publishedAt).toLocaleDateString('ko-KR')}</div>
+            <div class="video-hashtags">
+              ${video.hashtags.map(tag => `<span class="hashtag">#${tag}</span>`).join('')}
+            </div>
+            <div class="video-categories">
+              ${video.categories.map(cat => `<span class="category">${cat.toUpperCase()}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openVideo(videoId) {
+      window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+    }
+
+    // 페이지 로드 시 카테고리와 영상 로드
+    window.addEventListener('load', () => {
+      loadCategories();
+      loadVideos();
+    });
+  </script>
+</body>
+</html>
