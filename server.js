@@ -102,7 +102,7 @@ async function getVideoDetails(videoIds) {
       params: {
         key: YOUTUBE_API_KEY,
         id: batch.join(','),
-        part: 'snippet,contentDetails,statistics',
+        part: 'snippet,contentDetails,statistics,status',
         maxResults: 50
       }
     });
@@ -152,6 +152,12 @@ function categorizeByHashtags(hashtags) {
 
 function processVideos(videos) {
   return videos
+    .filter(video => {
+      const status = video.status || {};
+      return status.privacyStatus === 'public' &&
+        status.uploadStatus === 'processed' &&
+        status.embeddable !== false;
+    })
     .map(video => {
       const title = video.snippet?.title || '';
       const description = video.snippet?.description || '';
@@ -169,6 +175,9 @@ function processVideos(videos) {
           `https://i.ytimg.com/vi/${video.id}/hqdefault.jpg`,
         publishedAt: video.snippet?.publishedAt || '',
         channelTitle: video.snippet?.channelTitle || '',
+        privacyStatus: video.status?.privacyStatus || '',
+        uploadStatus: video.status?.uploadStatus || '',
+        embeddable: video.status?.embeddable !== false,
         hashtags,
         categories: categorizeByHashtags(hashtags),
         viewCount: video.statistics?.viewCount || '0',
