@@ -80,7 +80,9 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);ok('390px mobile viewport has no horizontal overflow');
   for(let i=0;i<6;i++)await page.getByRole('button',{name:'X',exact:true}).click();assert.equal(await page.locator('.channel-card[data-channel=x]').getAttribute('aria-pressed'),'true');
   for(const name of ['유튜브','인스타그램','X','페이스북','블로그'])await page.getByRole('button',{name,exact:true}).click();
-  await page.getByText('미리볼 채널을 선택하세요',{exact:true}).waitFor();ok('Rapid channel clicks and deselecting all channels');
+  assert.equal(await page.locator('.channel-card.selected').count(),0);
+  assert.equal(await page.getByRole('tab').count(),5);
+  assert.equal(await page.locator('#preview-content').isVisible(),true);ok('Rapid channel clicks keep all five previews after deselecting every destination');
   await page.setViewportSize({width:390,height:844});await page.goto(url+'/admin/login');await page.getByRole('link',{name:'화면 미리보기'}).waitFor();await page.screenshot({path:path.join(output,'login-mobile.png'),fullPage:true});
   assert.deepEqual(errors,[]);
   assert.equal(requests.some(r=>r.method!=='GET'||!(r.url.startsWith(url)||r.url.startsWith('blob:'+url))),false);ok('No console errors, uploads or external requests');

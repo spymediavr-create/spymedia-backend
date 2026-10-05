@@ -133,8 +133,7 @@ function renderChannels() {
     const check = element('span', 'channel-check', state.channels.has(channel.id) ? '✓' : ''); check.setAttribute('aria-hidden', 'true');
     button.append(icon, info, check);
     button.addEventListener('click', () => {
-      if (state.channels.has(channel.id)) state.channels.delete(channel.id); else { state.channels.add(channel.id); state.active = channel.id; }
-      if (!state.channels.has(state.active)) state.active = CHANNELS.find(item => state.channels.has(item.id))?.id || null;
+      if (state.channels.has(channel.id)) state.channels.delete(channel.id); else state.channels.add(channel.id);
       renderChannels(); renderPreview(); clearDraftFeedback();
     }); return button;
   }));
@@ -143,21 +142,19 @@ function setMediaPreference(kind) { state.media = kind; renderPreview(); }
 document.querySelectorAll('[data-media]').forEach(button => button.addEventListener('click', () => setMediaPreference(button.dataset.media)));
 
 function renderPreview() {
-  const selected = CHANNELS.filter(channel => state.channels.has(channel.id));
-  $('#preview-tabs').replaceChildren(...selected.map(channel => {
+  $('#preview-tabs').replaceChildren(...CHANNELS.map(channel => {
     const tab = element('button', `preview-tab ${state.active === channel.id ? 'active' : ''}`, channel.name); tab.type = 'button'; tab.id = `tab-${channel.id}`;
     tab.setAttribute('role', 'tab'); tab.setAttribute('aria-selected', String(state.active === channel.id)); tab.setAttribute('aria-controls', 'preview-content'); tab.tabIndex = state.active === channel.id ? 0 : -1;
     tab.addEventListener('click', () => { state.active = channel.id; renderPreview(); });
     tab.addEventListener('keydown', event => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault(); const index = selected.findIndex(item => item.id === channel.id);
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? selected.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + selected.length) % selected.length;
-      state.active = selected[next].id; renderPreview(); $(`#tab-${state.active}`).focus();
+      event.preventDefault(); const index = CHANNELS.findIndex(item => item.id === channel.id);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? CHANNELS.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + CHANNELS.length) % CHANNELS.length;
+      state.active = CHANNELS[next].id; renderPreview(); $(`#tab-${state.active}`).focus();
     }); return tab;
   }));
-  $('#preview-empty').hidden = !!selected.length; $('#preview-content').hidden = !selected.length;
-  if (!selected.length) { $('#preview-media').replaceChildren(); return; }
-  const channel = CHANNELS.find(item => item.id === state.active) || selected[0];
+  $('#preview-content').hidden = false;
+  const channel = CHANNELS.find(item => item.id === state.active) || CHANNELS[0];
   $('#preview-content').setAttribute('aria-labelledby', `tab-${channel.id}`);
   for (const [selector, value] of Object.entries({'#preview-account':channel.account, '#preview-channel-name':channel.name, '#detail-name':channel.name, '#detail-account':channel.account, '#detail-format':channel.format, '#detail-status':channelLabel(channel.id), '#preview-avatar':channel.initial})) $(selector).textContent = value;
   const title = $('#title').value.trim(); const description = $('#description').value.trim();
