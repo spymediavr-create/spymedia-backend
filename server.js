@@ -4,6 +4,7 @@ const axios = require('axios');
 const cors = require('cors');
 const express = require('express');
 const path = require('path');
+const { adminMiddleware } = require('./admin-ui/server-core.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,9 @@ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID || 'UCw7OnhgTIih0M5PoMkwCDug';
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS) || 15 * 60 * 1000;
 
+// Administrator routes own their origin checks and run before public CORS/body middleware.
+// They remain disabled until configured; the loopback preview has its own start command.
+app.use(adminMiddleware({ allowPreview: false }));
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));

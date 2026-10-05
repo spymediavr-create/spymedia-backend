@@ -1,0 +1,35 @@
+import {randomBytes} from 'node:crypto';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+test('Express integration preserves public video API and isolates administrator routes',async t=>{
+  process.env.YOUTUBE_API_KEY=randomBytes(32).toString('hex');
+  process.env.APP_MODE='preview';
+  const axios=require('axios'); const original=axios.get;
+  axios.get=async url=>{
+    if(url.endsWith('/channels'))return {data:{items:[{contentDetails:{relatedPlaylists:{uploads:'fixture-playlist'}}}]}};
+    if(url.endsWith('/playlistItems'))return {data:{items:[{contentDetails:{videoId:'fixture-video'}}]}};
+    if(url.endsWith('/videos'))return {data:{items:[{id:'fixture-video',snippet:{title:'#제주 #관광',description:'test fixture',publishedAt:'2026-01-01T00:00:00Z'},status:{privacyStatus:'public',uploadStatus:'processed',embeddable:true}}]}};
+    throw new Error('Unexpected external API path');
+  };
+  const {app}=require('../../server.js');
+  const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
+  t.after(()=>{server.close();axios.get=original;delete process.env.YOUTUBE_API_KEY;delete process.env.APP_MODE;});
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const videos=await(await fetch(base+'/api/videos?tag=all')).json();
+  assert.equal(videos.success,true);assert.equal(videos.count,1);assert.equal(videos.videos[0].videoId,'fixture-video');
+  assert.ok(videos.videos[0].categories.includes('tour'));
+  assert.equal((await(await fetch(base+'/api/categories')).json()).success,true);
+  assert.equal((await(await fetch(base+'/api/health')).json()).success,true);
+  const homepage=await fetch(base+'/');assert.equal(homepage.status,200);assert.match(await homepage.text(),/SpyMedia YouTube/);
+  assert.equal((await fetch(base+'/admin',{redirect:'manual'})).status,303);
+  assert.equal((await fetch(base+'/admin/preview')).status,404);
+  assert.equal((await fetch(base+'/api/admin/upload',{method:'POST',body:'fixture'})).status,401);
+  const status=await fetch(base+'/api/admin/status',{headers:{Origin:'https://other.invalid'}});
+  assert.equal(status.headers.get('access-control-allow-origin'),null);
+  const adminStatus=await status.json();
+  assert.equal(adminStatus.postingConnected,false);
+  assert.equal(adminStatus.mode,'disabled');
+  assert.equal(adminStatus.authenticated,false);
+});

@@ -1,0 +1,13 @@
+{
+  "name": "spymedia-sns-admin-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local SpyMedia SNS administrator UI; repository connection pending",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
