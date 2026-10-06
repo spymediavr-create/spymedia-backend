@@ -60,6 +60,19 @@ test('restart never replays queued or interrupted publishing jobs',async t=>{
   const {settings,store}=await fixture(t);await store.transaction(s=>{s.jobs.a={status:'publishing',publicationAttempted:true};s.jobs.b={status:'queued',publicationAttempted:false};});
   const restored=new Store(settings);await restored.init();assert.equal(restored.state.jobs.a.status,'unknown');assert.equal(restored.state.jobs.b.status,'failed');
 });
+test('job views expose stored source names during preparation without changing historical records',async t=>{
+  const {settings,store}=await fixture(t);const id=crypto.randomUUID();
+  await store.transaction(s=>{s.media[id]={id,name:'mock-drone.webm',kind:'video',sha256:'3'.repeat(64),size:20,duration:8};});
+  const jobs=new Jobs(settings,store,{convert:async()=>({id:crypto.randomUUID(),kind:'video',type:'video/mp4',size:20})},{});
+  const [created]=await jobs.create({title:'mock video',description:'local fixture',tags:[],channels:['facebook'],mediaIds:[id]});
+  assert.deepEqual(created.sourceMedia,[{kind:'video',name:'mock-drone.webm'}]);
+  await jobs.tail;assert.deepEqual((await jobs.list())[0].sourceMedia,created.sourceMedia);
+  const historical={...await store.job(created.id),mediaIds:[crypto.randomUUID()]};
+  const before=JSON.stringify(historical);assert.deepEqual(jobs.view(historical).sourceMedia,[{kind:null,name:null}]);
+  assert.equal(JSON.stringify(historical),before);
+  delete store.state.media[id].name;
+  assert.deepEqual(jobs.view(await store.job(created.id)).sourceMedia,[{kind:'video',name:null}]);
+});
 test('retry prepares a failure before publication but never starts posting on its own',async t=>{
   const {settings,store}=await fixture(t);const id=crypto.randomUUID(),jobId=crypto.randomUUID();
   await store.transaction(s=>{s.media[id]={id,kind:'video',sha256:'2'.repeat(64),size:20,duration:3};s.jobs[jobId]={id:jobId,channel:'blog',input:{title:'fixture',description:'description',tags:[]},mediaIds:[id],status:'failed',assets:[],publicationAttempted:false,createdAt:new Date().toISOString()};});

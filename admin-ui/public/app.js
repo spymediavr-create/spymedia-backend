@@ -185,7 +185,7 @@ function renderPreview() {
     const placeholder = element('div', 'media-placeholder'); placeholder.append(element('span', '', channel.type === 'video' ? '▷' : '▧'), element('p', '', channel.type === 'video' ? '영상을 선택하면 여기에 표시됩니다.' : '미디어를 선택하면 여기에 표시됩니다.')); media.append(placeholder);
     if (channel.type === 'video' && state.images.length) warning = '유튜브에는 영상이 필요합니다. 선택한 이미지는 다른 채널에서 확인할 수 있습니다.';
   }
-  if (state.video && state.images.length && channel.type !== 'video') warning = '영상과 이미지는 각각 확인할 수 있습니다. 실제 전송 방식은 서버 연결 후 결정됩니다.';
+  if (state.video && state.images.length && channel.type !== 'video') warning = '선택한 영상 또는 사진만 서버에 준비합니다. 두 종류를 함께 전송하지 않습니다.';
   $('#preview-warning').textContent = warning; $('#preview-warning').hidden = !warning;
   const blog = channel.id === 'blog'; $('#blog-note').hidden = !blog; $('#copy-blog').hidden = !blog;
 }

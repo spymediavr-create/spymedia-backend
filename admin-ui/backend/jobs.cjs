@@ -69,7 +69,11 @@ class Jobs {
     return this.list();
   }
   view(job) {
-    return {id:job.id,channel:job.channel,status:job.status,error:job.error||null,canRetry:job.status==='failed'&&!job.publicationAttempted,title:job.input.title,caption:caption(job.input),createdAt:job.createdAt,updatedAt:job.updatedAt,result:job.result||null,assets:job.assets.map(a=>({id:a.id,kind:a.kind,type:a.type,size:a.size,width:a.width,height:a.height,duration:a.duration,preview:'/api/admin/media/'+a.id+'?converted=1'})),originals:job.channel==='blog'?job.mediaIds.map(id=>({id,download:'/api/admin/media/'+id})):[],manuscript:job.manuscript||null,youtubePrivacy:job.channel==='youtube'?job.input.youtubePrivacy:null,madeForKids:job.channel==='youtube'?job.input.madeForKids:null};
+    const sourceMedia=job.mediaIds.map(id=>{
+      const media=this.store.state.media[id];
+      return {kind:media?.kind||null,name:typeof media?.name==='string'&&media.name?media.name:null};
+    });
+    return {id:job.id,channel:job.channel,status:job.status,error:job.error||null,canRetry:job.status==='failed'&&!job.publicationAttempted,title:job.input.title,caption:caption(job.input),sourceMedia,createdAt:job.createdAt,updatedAt:job.updatedAt,result:job.result||null,assets:job.assets.map(a=>({id:a.id,kind:a.kind,type:a.type,size:a.size,width:a.width,height:a.height,duration:a.duration,preview:'/api/admin/media/'+a.id+'?converted=1'})),originals:job.channel==='blog'?job.mediaIds.map(id=>({id,download:'/api/admin/media/'+id})):[],manuscript:job.manuscript||null,youtubePrivacy:job.channel==='youtube'?job.input.youtubePrivacy:null,madeForKids:job.channel==='youtube'?job.input.madeForKids:null};
   }
   async list() {await this.store.init();return Object.values(this.store.state.jobs).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,100).map(j=>this.view(j));}
 }
