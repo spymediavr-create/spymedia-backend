@@ -1,3 +1,4 @@
+import {createRecordRow} from './record-ui.js';
 import {formatBytes} from './domain.js';
 const NAMES={youtube:'유튜브',instagram:'인스타그램',facebook:'페이스북',x:'X',blog:'블로그'};
 const STATES={converting:'규격 변환 중',prepared:'전송 준비',queued:'전송 대기',publishing:'전송 확인 중',succeeded:'완료',failed:'실패',unknown:'채널에서 결과 확인 필요'};
@@ -22,7 +23,7 @@ export function jobDiagnostics(job) {
 export function attachCatalogUI({api,isBusy,setBusy,refreshJobs,describeJobMedia}) {
   if(!$('content-library'))return {updateControls(){},refresh:async()=>{}};
   $('content-library').hidden=false;
-  let kind='media',bin='active',offset=0,total=0,items=[],selected=new Set(),loading=false,requestId=0;
+  let kind='media',bin='active',offset=0,total=0,items=[],selected=new Set(),expanded=new Set(),loading=false,requestId=0;
   const limit=20;
   function updateControls() {
     const disabled=isBusy()||loading;
@@ -40,24 +41,26 @@ export function attachCatalogUI({api,isBusy,setBusy,refreshJobs,describeJobMedia
     $('catalog-change').textContent=bin==='trash'?'선택 항목 복원':'선택 항목 휴지통으로';
     $('catalog-range').textContent=total?(offset+1)+'–'+Math.min(offset+items.length,total)+' / '+total+'개':'0개';
     $('catalog-items').replaceChildren(...items.map(item=>{
-      const row=node('article');row.className='catalog-row';row.dataset.id=item.id;
-      const heading=node('label');const check=node('input');check.type='checkbox';check.checked=selected.has(item.id);check.dataset.allowed=String(bin==='trash'||!!item.canTrash);
-      check.setAttribute('aria-label',(item.name||item.title||'파일명 기록 없음')+' 선택');
+      const title=kind==='media'?item.name||'파일명 기록 없음':item.title||'제목 없음';
+      const check=node('input');check.type='checkbox';check.checked=selected.has(item.id);check.dataset.allowed=String(bin==='trash'||!!item.canTrash);
       check.addEventListener('change',()=>{check.checked?selected.add(item.id):selected.delete(item.id);updateControls();});
-      heading.append(check,node('strong',kind==='media'?item.name||'파일명 기록 없음':NAMES[item.channel]+' · '+(STATES[item.status]||item.status)+' · '+item.title));row.append(heading);
-      if(kind==='media') {
-        row.append(node('p',(item.kind==='video'?'영상':'이미지')+' · '+formatBytes(item.size||0)+' · 보관 '+date(item.createdAt)+' · 관련 작업 '+item.relatedJobs+'개'));
-        const a=node('a','원본 다운로드');a.href=item.download;a.download='';row.append(a);
-      } else {
-        const media=describeJobMedia(item);row.append(node('p','미디어: '+media.label),node('p',media.filenames.join(' · ')),jobDiagnostics(item));
-        if(item.mediaInTrash)row.append(node('p','원본 파일이 휴지통에 있습니다. 복원 후 작업을 준비할 수 있습니다.'));
-        if(item.result?.url)try{const url=new URL(item.result.url);if(url.protocol==='https:'&&/^(www\.)?(youtube\.com|instagram\.com|facebook\.com|x\.com)$/.test(url.hostname)){const a=node('a','채널에서 확인');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';row.append(a);}}catch{}
-      }
-      if(item.trashedAt)row.append(node('small','휴지통 이동 '+date(item.trashedAt)));
-      if(bin==='active'&&!item.canTrash)row.append(node('p','진행 중이거나 게시 결과 확인이 필요한 작업과 연결되어 이동할 수 없습니다.'));
-      return row;
+      return createRecordRow({id:item.id,title,createdAt:item.createdAt,channel:kind==='media'?(item.kind==='video'?'영상':'이미지'):NAMES[item.channel]||item.channel,status:kind==='media'?(bin==='trash'?'휴지통':item.canTrash?'보관 중':'사용 중'):STATES[item.status]||item.status,statusKey:kind==='media'?(bin==='trash'?'trash':item.canTrash?'stored':'protected'):item.status,check,className:'catalog-row',expanded:expanded.has(item.id),onToggle:open=>{open?expanded.add(item.id):expanded.delete(item.id);},fillDetails:panel=>{
+        panel.append(node('h4',title));
+        if(kind==='media') {
+          panel.append(node('p',(item.kind==='video'?'영상':'이미지')+' · '+formatBytes(item.size||0)+' · 보관 '+date(item.createdAt)+' · 관련 작업 '+item.relatedJobs+'개'));
+          const a=node('a','원본 다운로드');a.href=item.download;a.download='';panel.append(a);
+        } else {
+          const media=describeJobMedia(item);panel.append(node('p','채널: '+NAMES[item.channel]+' · '+(STATES[item.status]||item.status)),node('p',item.caption||''),node('p','미디어: '+media.label),node('p',media.filenames.join(' · ')),jobDiagnostics(item));
+          if(item.legacyReadOnly)panel.append(node('p','기존 미디어 작업 · 이력 조회만 지원합니다.'));
+          for(const asset of item.assets||[]){const media=node(asset.kind==='video'?'video':'img');media.src=asset.preview;if(asset.kind==='video'){media.controls=true;media.preload='metadata';}else media.alt=title;panel.append(media);}
+          if(item.mediaInTrash)panel.append(node('p','원본 파일이 휴지통에 있습니다. 복원 후 작업을 준비할 수 있습니다.'));
+          if(item.result?.url)try{const url=new URL(item.result.url);if(url.protocol==='https:'&&/^(www\.)?(youtube\.com|instagram\.com|facebook\.com|x\.com)$/.test(url.hostname)){const a=node('a','채널에서 확인');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';panel.append(a);}}catch{}
+        }
+        if(item.trashedAt)panel.append(node('small','휴지통 이동 '+date(item.trashedAt)));
+        if(bin==='active'&&!item.canTrash)panel.append(node('p','진행 중이거나 게시 결과 확인이 필요한 작업과 연결되어 이동할 수 없습니다.'));
+      }});
     }));
-    if(!items.length)$('catalog-items').append(node('p',bin==='trash'?'휴지통이 비어 있습니다.':'보관된 항목이 없습니다.'));
+    if(!items.length){const empty=node('p',bin==='trash'?'휴지통이 비어 있습니다.':'보관된 항목이 없습니다.');empty.className='record-empty';$('catalog-items').append(empty);}
     updateControls();
   }
   async function refresh() {
@@ -75,11 +78,11 @@ export function attachCatalogUI({api,isBusy,setBusy,refreshJobs,describeJobMedia
     if(isBusy()||loading)return;
     if(button.dataset.catalogKind)kind=button.dataset.catalogKind;
     if(button.dataset.catalogBin)bin=button.dataset.catalogBin;
-    offset=0;items=[];total=0;selected.clear();render();refresh();
+    offset=0;items=[];total=0;selected.clear();expanded.clear();render();refresh();
   });
   $('catalog-refresh').addEventListener('click',refresh);
-  $('catalog-prev').addEventListener('click',()=>{offset=Math.max(0,offset-limit);selected.clear();refresh();});
-  $('catalog-next').addEventListener('click',()=>{offset+=limit;selected.clear();refresh();});
+  $('catalog-prev').addEventListener('click',()=>{offset=Math.max(0,offset-limit);selected.clear();expanded.clear();refresh();});
+  $('catalog-next').addEventListener('click',()=>{offset+=limit;selected.clear();expanded.clear();refresh();});
   $('catalog-change').addEventListener('click',async()=>{
     if(isBusy()||loading||!selected.size)return;
     const restore=bin==='trash',ids=[...selected];

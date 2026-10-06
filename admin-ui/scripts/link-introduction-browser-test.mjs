@@ -97,10 +97,11 @@ try{
   await page.fill('#tag-input','#SpyMedia #강변');await page.click('#add-tags');
   await page.click('[data-channel=x]');await page.click('#prepare-server');await waitJobs();
   assert.equal(posts,0);assert.equal(conversionCalls,0);
-  const fb=page.locator('.job-card').filter({has:page.locator('strong',{hasText:'페이스북 · 전송 준비'})});
-  const x=page.locator('.job-card').filter({has:page.locator('strong',{hasText:'X · 전송 준비'})});
+  const fb=page.locator('.job-card[data-job-channel=facebook][data-status=prepared]');
+  const x=page.locator('.job-card[data-job-channel=x][data-status=prepared]');
   assert.equal(await x.locator('input').isDisabled(),true);
-  assert.match(await page.locator('.job-card').filter({has:page.locator('h3',{hasText:'기존 영상 작업'})}).textContent(),/이력 조회만/);
+  const legacyRow=page.locator('.job-card').filter({has:page.locator('h3',{hasText:'기존 영상 작업'})});await legacyRow.locator('.record-toggle').click();
+  assert.match(await legacyRow.locator('.record-details').textContent(),/이력 조회만/);await legacyRow.locator('.record-toggle').click();
   const linkJobs=Object.values(store.state.jobs).filter(j=>j.type==='link');assert.equal(linkJobs.length,3);
   const blog=linkJobs.find(j=>j.channel==='blog');assert.match(blog.manuscript,/https:\/\/www.youtube.com\/watch/);assert.equal(blog.assets.length,1);
   await fb.locator('input').check();page.once('dialog',d=>{assert.match(d.message(),/사용자가 수정한 소개 제목/);assert.match(d.message(),/AbCdEf123_-/);return d.dismiss();});

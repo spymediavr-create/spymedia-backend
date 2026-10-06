@@ -58,10 +58,17 @@ try {
   assert.match(await page.locator('#detail-status').textContent(),/서버 설정 준비/);assert.doesNotMatch(await page.locator('#detail-status').textContent(),/실패/);
   await page.click('#tab-instagram');assert.match(await page.locator('#detail-status').textContent(),/별도 준비/);
   assert.match(await page.locator('#detail-job-status').textContent(),/최근 작업: 실패/);
-  assert.match(await page.locator('.job-card').filter({has:page.locator('h3',{hasText:'Synthetic '+failedId})}).textContent(),/오류 코드: interrupted.*준비된 파일 0개/s);
+  const failedRow=page.locator('.job-card[data-id="'+failedId+'"]');assert.equal(await failedRow.locator('.record-details').isHidden(),true);
+  await failedRow.locator('.record-toggle').click();assert.match(await failedRow.locator('.record-details').textContent(),/오류 코드: interrupted.*준비된 파일 0개/s);await failedRow.locator('.record-toggle').click();
   assert.equal(await page.getByRole('tab').count(),5);ok('Connection configuration stays separate from recent failure; safe error code, asset count and dates are visible');
   assert.match(await page.locator('#catalog-range').textContent(),/27개/);
   assert.equal(await row(protectedId).locator('input').isDisabled(),true);
+  await row(storedId).locator('.record-toggle').click();await row(storedId).locator('.record-select').check();await page.click('#catalog-next');await page.waitForFunction(()=>!document.getElementById('catalog-refresh').disabled);
+  assert.equal(await page.locator('#catalog-items .record-details:visible').count(),0);assert.equal(await page.locator('#catalog-change').isDisabled(),true);
+  await page.click('#catalog-prev');await page.waitForFunction(()=>!document.getElementById('catalog-refresh').disabled);await row(storedId).waitFor();
+  assert.equal(await row(storedId).locator('.record-select').isChecked(),false);assert.equal(await row(storedId).locator('.record-details').isHidden(),true);
+  ok('Changing pages clears selection and disclosure so another page cannot inherit hidden actions');
+
   await row(storedId).locator('input').check();page.once('dialog',d=>d.dismiss());await page.click('#catalog-change');
   assert.equal(store.state.media[storedId].trashedAt,undefined);ok('Protected originals cannot be selected and cancellation changes no stored content');
   const key=store.state.jobs[publishedId].key,result=structuredClone(store.state.jobs[publishedId].result);

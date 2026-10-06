@@ -1,3 +1,4 @@
+import {createRecordRow} from './record-ui.js';
 import {attachCatalogUI,jobDiagnostics,formatFailureDetails} from './catalog-ui.js';
 import {draftIssues} from './domain.js';
 import {parseYouTubeUrl} from './youtube-url.js';
@@ -23,7 +24,7 @@ export function attachServerUI(status,getDraft) {
   $('server-workflow').hidden=false;$('prepare-server').disabled=!status.uploadsConnected;
   $('server-note').textContent=status.uploadsConnected?'영상 파일 없이 링크 소개를 준비합니다. Facebook·X는 선택·확인 후 전송하고, 블로그는 원고를 복사합니다.':'영구 저장소 연결을 확인하세요.';
   $('storage-note').textContent='링크 소개 준비 시 블로그에 선택한 사진만 보관합니다.';
-  let jobs=[],chosen=new Set(),busy=false,sessionExpired=false,poll,catalog;
+  let jobs=[],chosen=new Set(),expanded=new Set(),busy=false,sessionExpired=false,poll,catalog;
   const notice=el('p');notice.className='session-notice';notice.hidden=true;notice.setAttribute('role','alert');$('server-workflow').prepend(notice);
   function expireSession(){
     sessionExpired=true;chosen.clear();notice.hidden=false;
@@ -49,28 +50,32 @@ export function attachServerUI(status,getDraft) {
     window.dispatchEvent(new CustomEvent('sns-job-status',{detail:jobs.map(job=>({channel:job.channel,status:job.status}))}));
     chosen=new Set([...chosen].filter(id=>jobs.some(j=>j.id===id&&!sessionExpired&&j.type==='link'&&['facebook','x'].includes(j.channel)&&j.canSend!==false&&j.status==='prepared'&&j.channel!=='blog'&&status.channels?.[j.channel]?.configured)));
     $('server-jobs').replaceChildren(...jobs.map(job=>{
-      const card=el('article');card.className='job-card';
-      const heading=el('label');const check=el('input');check.type='checkbox';check.checked=chosen.has(job.id);check.disabled=busy||sessionExpired||job.type!=='link'||!['facebook','x'].includes(job.channel)||job.canSend===false||job.status!=='prepared'||job.channel==='blog'||!status.channels?.[job.channel]?.configured;
-      check.addEventListener('change',()=>{check.checked?chosen.add(job.id):chosen.delete(job.id);updateButton();});heading.append(check,el('strong',NAMES[job.channel]+' · '+STATES[job.status]));card.append(heading,el('h3',job.title),el('p',job.caption));
-      const details=describeJobMedia(job);const label=el('p','미디어: '+details.label);label.className='job-media-label';
-      const files=el('ul');files.className='job-files';details.filenames.forEach(name=>files.append(el('li',name)));card.append(label,files,jobDiagnostics(job));
-      if(job.legacyReadOnly)card.append(el('p','기존 미디어 작업 · 이력 조회만 지원합니다. 새 링크 소개를 준비하세요.'));
-      const source=parseYouTubeUrl(job.youtubeUrl);if(source){const a=el('a','YouTube 원본 확인 ↗');a.href=source.url;a.target='_blank';a.rel='noopener noreferrer';card.append(a);}
-      if(job.mediaInTrash)card.append(el('p','원본 파일이 휴지통에 있습니다. 보관 콘텐츠에서 복원하세요.'));
-      if(job.youtubePrivacy)card.append(el('small','공개 범위: '+({private:'비공개',unlisted:'일부 공개',public:'공개'}[job.youtubePrivacy])+' · '+(job.madeForKids?'아동용':'아동용 아님')));
-      if(job.error)card.append(el('p',ERRORS[job.error]||'처리를 완료하지 못했습니다. 중복 전송 전에 채널 상태를 확인하세요.'));
-      if(job.canRetry){const retry=el('button','실패 작업 다시 준비');retry.type='button';retry.disabled=busy||sessionExpired;retry.addEventListener('click',async()=>{if(busy||sessionExpired)return;busy=true;render();try{jobs=(await api('jobs/retry','POST',{id:job.id})).jobs;}catch(e){$('server-feedback').textContent=e.message;}finally{busy=false;render();}});card.append(retry);}
-      for(const asset of job.assets||[]){const media=el(asset.kind==='video'?'video':'img');media.src=asset.preview;if(asset.kind==='video'){media.controls=true;media.preload='metadata';}else media.alt=job.title;card.append(media);}
-      if(job.channel==='blog'){
-        const copy=el('button','원고 복사');copy.type='button';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(job.manuscript);$('server-feedback').textContent='원고를 복사했습니다. 이미지를 내려받아 네이버에서 최종 게시하세요.';}catch{$('server-feedback').textContent='원고 텍스트를 선택해 복사하세요.';}});card.append(copy);
-        (job.originals||[]).forEach((media,i)=>{const a=el('a','원본 '+(i+1)+' 다운로드');a.href=media.download;a.download='';card.append(a);});
-        if(job.type!=='link')(job.assets||[]).forEach((media,i)=>{const a=el('a','준비한 이미지 '+(i+1)+' 다운로드');a.href=media.preview;a.download='blog-image-'+(i+1)+'.jpg';card.append(a);});
-      }
-      if(job.result?.url){try{const url=new URL(job.result.url);if(url.protocol==='https:'&&/^(www\.)?(youtube\.com|instagram\.com|facebook\.com|x\.com)$/.test(url.hostname)){const a=el('a','채널에서 확인');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';card.append(a);}}catch{}}
-      if(job.result?.privacyStatus)card.append(el('small','유튜브 실제 공개 상태: '+job.result.privacyStatus));
-      if(job.result?.processing)card.append(el('small','유튜브 업로드 완료 · 영상 처리는 진행 중입니다.'));
-      return card;
-    }));updateButton();
+      const check=el('input');check.type='checkbox';check.checked=chosen.has(job.id);check.disabled=busy||sessionExpired||job.type!=='link'||!['facebook','x'].includes(job.channel)||job.canSend===false||job.status!=='prepared'||job.channel==='blog'||!status.channels?.[job.channel]?.configured;
+      check.addEventListener('change',()=>{check.checked?chosen.add(job.id):chosen.delete(job.id);updateButton();});
+      const card=createRecordRow({id:job.id,title:job.title||'제목 없음',createdAt:job.createdAt,channel:NAMES[job.channel]||job.channel,status:STATES[job.status]||job.status,statusKey:job.status,check,className:'job-card',expanded:expanded.has(job.id),onToggle:open=>{open?expanded.add(job.id):expanded.delete(job.id);},fillDetails:panel=>{
+        panel.append(el('h4',job.title),el('p','채널: '+NAMES[job.channel]+' · '+(STATES[job.status]||job.status)),el('p',job.caption));
+        const mediaDescription=describeJobMedia(job);const label=el('p','미디어: '+mediaDescription.label);label.className='job-media-label';
+        const files=el('ul');files.className='job-files';mediaDescription.filenames.forEach(name=>files.append(el('li',name)));panel.append(label,files,jobDiagnostics(job));
+        if(job.legacyReadOnly)panel.append(el('p','기존 미디어 작업 · 이력 조회만 지원합니다. 새 링크 소개를 준비하세요.'));
+        const source=parseYouTubeUrl(job.youtubeUrl);if(source){const a=el('a','YouTube 원본 확인 ↗');a.href=source.url;a.target='_blank';a.rel='noopener noreferrer';panel.append(a);}
+        if(job.mediaInTrash)panel.append(el('p','원본 파일이 휴지통에 있습니다. 보관 콘텐츠에서 복원하세요.'));
+        if(job.youtubePrivacy)panel.append(el('small','공개 범위: '+({private:'비공개',unlisted:'일부 공개',public:'공개'}[job.youtubePrivacy])+' · '+(job.madeForKids?'아동용':'아동용 아님')));
+        if(job.error)panel.append(el('p',ERRORS[job.error]||'처리를 완료하지 못했습니다. 중복 전송 전에 채널 상태를 확인하세요.'));
+        if(job.canRetry){const retry=el('button','실패 작업 다시 준비');retry.type='button';retry.disabled=busy||sessionExpired;retry.addEventListener('click',async()=>{if(busy||sessionExpired)return;busy=true;render();try{jobs=(await api('jobs/retry','POST',{id:job.id})).jobs;}catch(e){$('server-feedback').textContent=e.message;}finally{busy=false;render();}});panel.append(retry);}
+        for(const asset of job.assets||[]){const media=el(asset.kind==='video'?'video':'img');media.src=asset.preview;if(asset.kind==='video'){media.controls=true;media.preload='metadata';}else media.alt=job.title;panel.append(media);}
+        if(job.channel==='blog'){
+          const copy=el('button','원고 복사');copy.type='button';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(job.manuscript);$('server-feedback').textContent='원고를 복사했습니다. 이미지를 내려받아 네이버에서 최종 게시하세요.';}catch{$('server-feedback').textContent='원고 텍스트를 선택해 복사하세요.';}});panel.append(copy);
+          (job.originals||[]).forEach((media,i)=>{const a=el('a','원본 '+(i+1)+' 다운로드');a.href=media.download;a.download='';panel.append(a);});
+          if(job.type!=='link')(job.assets||[]).forEach((media,i)=>{const a=el('a','준비한 이미지 '+(i+1)+' 다운로드');a.href=media.preview;a.download='blog-image-'+(i+1)+'.jpg';panel.append(a);});
+        }
+        if(job.result?.url){try{const url=new URL(job.result.url);if(url.protocol==='https:'&&/^(www\.)?(youtube\.com|instagram\.com|facebook\.com|x\.com)$/.test(url.hostname)){const a=el('a','채널에서 확인');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';panel.append(a);}}catch{}}
+        if(job.result?.privacyStatus)panel.append(el('small','유튜브 실제 공개 상태: '+job.result.privacyStatus));
+        if(job.result?.processing)panel.append(el('small','유튜브 업로드 완료 · 영상 처리는 진행 중입니다.'));
+      }});
+      card.dataset.jobChannel=job.channel;return card;
+    }));
+    if(!jobs.length){const empty=el('p','준비한 작업이 없습니다. 링크 소개를 준비하면 여기에 표시됩니다.');empty.className='record-empty';$('server-jobs').append(empty);}
+    updateButton();
   }
   async function refresh(){if(sessionExpired)return;try{jobs=(await api('jobs')).jobs;render();}catch(e){$('server-feedback').textContent=e.message;}clearTimeout(poll);if(!sessionExpired)poll=setTimeout(refresh,10000);}
   $('facebook-check').addEventListener('click',async()=>{

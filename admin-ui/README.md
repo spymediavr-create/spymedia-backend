@@ -34,6 +34,12 @@ http://127.0.0.1:4310/admin/login 에서 **화면 미리보기**를 선택합니
 
 Facebook 링크 작업의 준비된 파일 0개는 정상입니다. Page 인증 단계 실패이고 게시 시도 전이라면 명시적으로 다시 준비할 수 있지만, 게시 시도 이후 결과가 불확실하면 기존 중복 방지에 따라 재전송을 차단합니다. 인증 만료와 권한 부족은 숫자 진단 또는 안전한 플랫폼 경로에서 확인해야 하며, 단순 분류만으로 만료를 단정하지 않습니다.
 
+## 작업·보관함 목록
+
+작업 이력·보관 파일·휴지통은 체크박스, 날짜, 채널/파일 유형, 제목/파일명, 상태와 **상세** 버튼을 짧은 행으로 표시합니다. 긴 제목과 파일명은 행에서 줄임 표시하고 상세에서 전체 내용을 확인합니다. 긴 본문·오류·이미지는 기본으로 접혀 있으며 **상세 / 접기**로 열고 닫습니다. 이미지는 상세를 처음 펼칠 때만 불러옵니다.
+
+행 선택과 상세 펼침은 독립적입니다. 목록 새로고침은 같은 항목의 선택과 펼침을 유지하고, 보관/휴지통 탭·페이지를 바꾸면 선택을 초기화합니다. 선택 전송 확인, 블로그 원고 복사, 원본 다운로드, 휴지통 이동·복원과 기존 중복 방지는 유지합니다. 휴지통의 작업 행은 원래 작업 상태도 표시합니다. 모바일에서는 날짜·채널을 제목 아래에 배치하며 체크박스는 16px로 고정합니다.
+
 ## 검증
 
 ```powershell
@@ -43,6 +49,7 @@ node --test admin-ui/tests/*.test.mjs
 node admin-ui/scripts/browser-test.mjs
 node admin-ui/scripts/link-introduction-browser-test.mjs
 node admin-ui/scripts/catalog-browser-test.mjs
+node admin-ui/scripts/compact-lists-browser-test.mjs
 ```
 
 이전 `media-selection-browser-test.mjs`와 `server-browser-test.mjs` 진입점은 새 링크 검사로 연결됩니다. `media-test.mjs`는 남아 있는 이전 변환 모듈용 검사이며 현재 링크 흐름의 필수 검사가 아닙니다.
