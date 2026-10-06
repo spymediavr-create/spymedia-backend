@@ -5,7 +5,7 @@ const {promisify} = require('node:util');
 const scrypt = promisify(crypto.scrypt);
 const {Service} = require('./backend/service.cjs');
 const root = path.join(__dirname, 'public');
-const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'server-ui.js', 'catalog-ui.js'].map(file => ['/admin-assets/' + file, file]));
+const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'instagram-design.js'].map(file => ['/admin-assets/' + file, file]));
 const SESSION_MS = 30 * 60 * 1000;
 const LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
@@ -33,9 +33,9 @@ function createAdminHandler(options = {}) {
   const cookie = token => `spymedia_admin=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${token ? SESSION_MS / 1000 : 0}${secureCookie ? '; Secure' : ''}`;
   async function readJson(req) {
     if (!(req.headers['content-type'] || '').startsWith('application/json')) throw Object.assign(new Error(), {status:415});
-    if (Number(req.headers['content-length'] || 0) > 16384) throw Object.assign(new Error(), {status:413});
+    if (Number(req.headers['content-length'] || 0) > 65536) throw Object.assign(new Error(), {status:413});
     const buffers = []; let size = 0;
-    for await (const chunk of req) { size += chunk.length; if (size > 16384) throw Object.assign(new Error(), {status:413}); buffers.push(chunk); }
+    for await (const chunk of req) { size += chunk.length; if (size > 65536) throw Object.assign(new Error(), {status:413}); buffers.push(chunk); }
     try { return JSON.parse(Buffer.concat(buffers).toString('utf8')); } catch { throw Object.assign(new Error(), {status:400}); }
   }
   async function file(res, name) { res.writeHead(200, {'Content-Type':name.endsWith('.css') ? 'text/css; charset=utf-8' : name.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8'}); res.end(await fs.readFile(path.join(root, name))); }
@@ -86,7 +86,9 @@ function createAdminHandler(options = {}) {
         if(route==='/api/admin/logout'&&req.method==='POST'){
           sessions.delete(sessionId);json(res,200,{authenticated:false},{'Set-Cookie':cookie('')});
         }else if(route==='/api/admin/media'&&req.method==='POST'){
-          const media=await service.media.upload(req);json(res,201,{media});
+          const media=await service.photos.upload(req);json(res,201,{media});
+        }else if(route==='/api/admin/youtube/import'&&req.method==='POST'){
+          const body=await readJson(req);json(res,200,{video:await service.youtubeSource.fetch(body.url)});
         }else if(route.startsWith('/api/admin/media/')&&['GET','HEAD'].includes(req.method)){
           await service.sendMedia(req,res,url);
         }else if(route==='/api/admin/jobs'&&req.method==='GET'){
@@ -110,6 +112,8 @@ function createAdminHandler(options = {}) {
         await file(res, 'login.html');
       } else if (route === '/admin/preview' && preview) {
         await file(res, 'admin.html');
+      } else if (route === '/admin/instagram' || route === '/admin/instagram/preview' && preview) {
+        if(authenticated||preview)await file(res,'instagram-design.html');else {res.writeHead(303,{'Location':'/admin/login'});res.end();}
       } else if (route === '/admin' || route === '/admin/') {
         if (authenticated) await file(res, 'admin.html'); else { res.writeHead(303, {'Location':'/admin/login'}); res.end(); }
       } else json(res, 404, {error:'Not found'});

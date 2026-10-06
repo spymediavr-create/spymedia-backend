@@ -7,6 +7,8 @@ const {Media} = require('./media.cjs');
 const {Jobs} = require('./jobs.cjs');
 const {Connectors} = require('./connectors.cjs');
 const {Catalog} = require('./catalog.cjs');
+const {Photos}=require('./photos.cjs');
+const {YouTubeSource}=require('./youtube-source.cjs');
 const {error} = require('./errors.cjs');
 class Service {
   constructor(options={}) {
@@ -14,11 +16,12 @@ class Service {
     this.connectors=options.connectors||new Connectors(this.settings,{mediaUrl:asset=>this.signedUrl(asset)});
     this.jobs=new Jobs(this.settings,this.store,this.media,this.connectors);
     this.catalog=new Catalog(this.store,this.jobs);
+    this.photos=options.photos||new Photos(this.store);
+    this.youtubeSource=options.youtubeSource||new YouTubeSource(this.settings,this.photos);
   }
   async status() {
     let storage=false;try{if(this.settings.storageConfigured){await this.store.init();storage=true;}}catch{}
-    const tools=storage&&await this.media.tools();
-    return {uploadsConnected:!!tools,storageReady:storage,conversionReady:!!tools,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
+    return {uploadsConnected:storage,storageReady:storage,conversionReady:false,youtubeImportReady:!!this.settings.env.YOUTUBE_API_KEY,legacyPreparationDisabled:!this.settings.legacyPreparationEnabled,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
   }
   signedUrl(asset) {
     if(!this.settings.mediaKey||!this.settings.origin)throw error(503,'media_delivery_unavailable');
@@ -41,7 +44,7 @@ class Service {
     let start=0,end=stat.size-1,status=200;const range=req.headers.range;
     if(range){const match=/^bytes=(\d+)-(\d*)$/.exec(range);if(!match)throw error(416,'invalid_range');start=Number(match[1]);end=match[2]?Number(match[2]):end;if(start>end||end>=stat.size)throw error(416,'invalid_range');status=206;}
     const extension={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','video/mp4':'mp4','video/webm':'webm','video/quicktime':'mov'}[item.type];
-    res.writeHead(status,{'Content-Type':item.type,'Content-Length':end-start+1,'Accept-Ranges':'bytes','Content-Disposition':converted?'inline':`attachment; filename="original.${extension}"; filename*=UTF-8''${encodeURIComponent(item.name)}`,...(status===206?{'Content-Range':`bytes ${start}-${end}/${stat.size}`}:{})});
+    res.writeHead(status,{'Content-Type':item.type,'Content-Length':end-start+1,'Accept-Ranges':'bytes','Content-Disposition':converted||url.searchParams.get('preview')==='1'?'inline':`attachment; filename="original.${extension}"; filename*=UTF-8''${encodeURIComponent(item.name)}`,...(status===206?{'Content-Range':`bytes ${start}-${end}/${stat.size}`}:{})});
     if(req.method==='HEAD'){res.end();return;}
     const stream=fs.createReadStream(file,{start,end});stream.on('error',()=>res.destroy());res.on('close',()=>stream.destroy());stream.pipe(res);
   }

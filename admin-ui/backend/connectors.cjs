@@ -15,7 +15,7 @@ async function request(method,url,token,body,headers={}) {
     return {data:response.data,headers:response.headers};
   }catch(e){if(e.code&&e.status)throw e;throw error(502,'channel_network_failure',method!=='GET');}
 }
-function caption(input) {return [input.title,input.description,input.tags.map(tag=>'#'+tag).join(' ')].filter(Boolean).join('\n\n');}
+function caption(input) {return typeof input.xText==='string'?[input.xText,input.youtubeUrl].filter(Boolean).join('\n\n'):[input.title,input.description,input.youtubeUrl,input.tags.map(tag=>'#'+tag).join(' ')].filter(Boolean).join('\n\n');}
 function xLength(text) {return [...text.replace(/https?:\/\/\S+/g,'x'.repeat(23))].reduce((n,ch)=>n+(/[\u1100-\u11ff\u2e80-\ua4cf\uac00-\ud7af\uf900-\ufaff]/u.test(ch)||ch.codePointAt(0)>0xffff?2:1),0);}
 class Connectors {
   constructor(settings,options={}) {this.settings=settings;this.env=settings.env;this.request=options.request||request;this.sleep=options.sleep||sleep;this.mediaUrl=options.mediaUrl;}
@@ -23,7 +23,7 @@ class Connectors {
     const e=this.env,v=/^v\d+\.\d+$/.test(e.META_GRAPH_VERSION||'');const urls=!!this.settings.origin&&!!this.settings.mediaKey;
     return {
       instagram:!!(v&&urls&&e.IG_USER_ID&&/^\d+$/.test(e.IG_USER_ID)&&e.IG_ACCESS_TOKEN&&e.IG_PUBLISH_ENABLED==='true'),
-      facebook:!!(v&&urls&&e.FB_PAGE_ACCESS_TOKEN&&e.FB_PUBLISH_ENABLED==='true'&&(!e.FB_PAGE_ID||e.FB_PAGE_ID===TARGETS.facebook)),
+      facebook:!!(v&&e.FB_PAGE_ACCESS_TOKEN&&e.FB_PUBLISH_ENABLED==='true'&&(!e.FB_PAGE_ID||e.FB_PAGE_ID===TARGETS.facebook)),
       x:!!(e.X_USER_ACCESS_TOKEN&&e.X_PUBLISH_ENABLED==='true'&&e.X_COST_LIMIT_ACKNOWLEDGED==='true'),
       youtube:!!(e.YOUTUBE_OAUTH_CLIENT_ID&&e.YOUTUBE_OAUTH_CLIENT_SECRET&&e.YOUTUBE_OAUTH_REFRESH_TOKEN&&e.YOUTUBE_PUBLISH_ENABLED==='true'),blog:true
     };
@@ -66,6 +66,11 @@ class Connectors {
     const call=(method,route,body)=>this.request(method,root+'/'+route,token,body);
     const identity=(await call('GET','me?fields=id,name')).data;if(identity.id!==id)throw error(409,'account_mismatch');
     let postId;
+    if(job.type==='link'){
+      await ctx.beforePublication({});postId=identifier((await call('POST',id+'/feed',{message:caption(job.input),link:job.input.youtubeUrl})).data.id);
+      await ctx.checkpoint({externalId:postId});const result=(await call('GET',postId+'?fields=id,permalink_url')).data;
+      if(result.id!==postId)throw error(502,'verify_publication',true);return {externalId:postId,url:result.permalink_url||null};
+    }
     if(job.assets[0].kind==='video') {
       await ctx.beforePublication({});
       const created=(await this.request('POST','https://graph-video.facebook.com/'+this.env.META_GRAPH_VERSION+'/'+id+'/videos',token,{file_url:this.mediaUrl(job.assets[0]),title:job.input.title,description:caption(job.input)})).data;
@@ -92,6 +97,11 @@ class Connectors {
   async x(job,ctx) {
     const token=this.env.X_USER_ACCESS_TOKEN,root='https://api.x.com/2';const call=(method,route,body)=>this.request(method,root+'/'+route,token,body);
     if((await call('GET','users/me')).data.data?.username!==TARGETS.x)throw error(409,'account_mismatch');
+    if(job.type==='link'){
+      await ctx.beforePublication({});const postId=identifier((await call('POST','tweets',{text:caption(job.input)})).data.data?.id);await ctx.checkpoint({externalId:postId});
+      if((await call('GET','tweets/'+postId)).data.data?.id!==postId)throw error(502,'verify_publication',true);
+      return {externalId:postId,url:'https://x.com/'+TARGETS.x+'/status/'+postId};
+    }
     const ids=[];
     for(const asset of job.assets) {
       const uploaded=identifier((await call('POST','media/upload/initialize',{total_bytes:asset.size,media_type:asset.type,media_category:asset.kind==='video'?'tweet_video':'tweet_image'})).data.data?.id);ids.push(uploaded);await ctx.checkpoint({uploadedMediaIds:[...ids]});

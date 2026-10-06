@@ -56,6 +56,7 @@ const change=async()=>{await page.click('#catalog-change');await page.waitForFun
 try {
   await page.goto(origin+'/admin');await page.waitForURL(origin+'/admin/login');await login();
   assert.match(await page.locator('#detail-status').textContent(),/서버 설정 준비/);assert.doesNotMatch(await page.locator('#detail-status').textContent(),/실패/);
+  await page.click('#tab-instagram');assert.match(await page.locator('#detail-status').textContent(),/별도 준비/);
   assert.match(await page.locator('#detail-job-status').textContent(),/최근 작업: 실패/);
   assert.match(await page.locator('.job-card').filter({has:page.locator('h3',{hasText:'Synthetic '+failedId})}).textContent(),/오류 코드: interrupted.*준비된 파일 0개/s);
   assert.equal(await page.getByRole('tab').count(),5);ok('Connection configuration stays separate from recent failure; safe error code, asset count and dates are visible');

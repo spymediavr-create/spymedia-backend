@@ -16,7 +16,7 @@ import {error} from '../backend/errors.cjs';
 async function fixture(t) {
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'spymedia-test-'));
   t.after(()=>{assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));return fs.rm(dir,{recursive:true,force:true});});
-  const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'true',PUBLIC_ORIGIN:'https://fixture.invalid',MEDIA_SIGNING_KEY:'ab'.repeat(32)});
+  const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'true',SNS_LEGACY_PREPARATION_ENABLED:'true',PUBLIC_ORIGIN:'https://fixture.invalid',MEDIA_SIGNING_KEY:'ab'.repeat(32)});
   const store=new Store(settings);await store.init();
   return {settings,store,dir};
 }

@@ -76,7 +76,7 @@ test('interrupted video preparation retains the original and resumes the same tw
 async function fixture(t) {
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'spymedia-catalog-test-'));
   t.after(()=>{assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));return fs.rm(dir,{recursive:true,force:true});});
-  const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'true'});
+  const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'true',SNS_LEGACY_PREPARATION_ENABLED:'true'});
   const store=new Store(settings);await store.init();
   let publications=0;
   const media={tools:async()=>true,convert:async()=>{throw Error('No conversion expected');}};

@@ -17,6 +17,7 @@ function config(env = process.env) {
     maxStorageBytes: Math.min(20 * 1024 ** 3, Math.max(1024 ** 3, Number(env.SNS_MAX_STORAGE_BYTES) || 2 * 1024 ** 3)),
     mediaKey: /^[a-f0-9]{64,128}$/i.test(env.MEDIA_SIGNING_KEY || '') ? env.MEDIA_SIGNING_KEY : '',
     publishingEnabled: env.SNS_PUBLISH_ENABLED === 'true',
+    legacyPreparationEnabled: env.SNS_LEGACY_PREPARATION_ENABLED === 'true',
     requireStorage() { if (!storageConfigured) throw error(503, 'storage_unavailable'); }
   };
 }
