@@ -2,16 +2,16 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const axios = require('axios');
 const {error} = require('./errors.cjs');
+const {providerFailure}=require('./diagnostics.cjs');
 const HOSTS = new Set(['graph.instagram.com','graph.facebook.com','graph-video.facebook.com','api.x.com','www.googleapis.com','oauth2.googleapis.com']);
 const TARGETS = {instagram:'spymedia_kr',facebook:'1387247911137772',x:'spymedia_kor',youtube:'UCw7OnhgTIih0M5PoMkwCDug'};
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
 const identifier = value => { if(typeof value!=='string'||!/^[-_a-zA-Z0-9]{1,160}$/.test(value))throw error(502,'invalid_channel_response',true);return value; };
-async function request(method,url,token,body,headers={}) {
+async function request(method,url,token,body,headers={},transport=axios) {
   const parsed=new URL(url);if(parsed.protocol!=='https:'||!HOSTS.has(parsed.hostname)||parsed.username||parsed.password)throw error(500,'invalid_api_endpoint');
   try {
-    const response=await axios({method,url,data:body,headers:{...(token?{Authorization:'Bearer '+token}:{}),...headers},timeout:120000,maxRedirects:0,maxContentLength:1024*1024,maxBodyLength:600*1024**2,validateStatus:()=>true});
-    if(response.status<200||response.status>=300)throw error(response.status===401||response.status===403?409:response.status===429?429:502,response.status===401||response.status===403?'channel_auth_or_permission':response.status===429?'channel_rate_limit':'channel_request_failed',response.status>=500);
-    if(response.data?.error||response.data?.errors?.length)throw error(502,'channel_request_failed');
+    const response=await transport({method,url,data:body,headers:{...(token?{Authorization:'Bearer '+token}:{}),...headers},timeout:120000,maxRedirects:0,maxContentLength:1024*1024,maxBodyLength:600*1024**2,validateStatus:()=>true});
+    if(response.status<200||response.status>=300||response.data?.error||response.data?.errors?.length){const failure=providerFailure(response,method,parsed.hostname);throw Object.assign(error(failure.status,failure.code,failure.uncertain),{providerDetails:failure.providerDetails});}
     return {data:response.data,headers:response.headers};
   }catch(e){if(e.code&&e.status)throw e;throw error(502,'channel_network_failure',method!=='GET');}
 }
@@ -27,6 +27,22 @@ class Connectors {
       x:!!(e.X_USER_ACCESS_TOKEN&&e.X_PUBLISH_ENABLED==='true'&&e.X_COST_LIMIT_ACKNOWLEDGED==='true'),
       youtube:!!(e.YOUTUBE_OAUTH_CLIENT_ID&&e.YOUTUBE_OAUTH_CLIENT_SECRET&&e.YOUTUBE_OAUTH_REFRESH_TOKEN&&e.YOUTUBE_PUBLISH_ENABLED==='true'),blog:true
     };
+  }
+  async facebookIdentity(){
+    const root='https://graph.facebook.com/'+this.env.META_GRAPH_VERSION;
+    try{
+      const identity=(await this.request('GET',root+'/me?fields=id,name',this.env.FB_PAGE_ACCESS_TOKEN)).data;
+      if(!identity||typeof identity!=='object'||typeof identity.id!=='string')throw error(502,'invalid_channel_response');
+      if(identity.id!==TARGETS.facebook)throw error(409,'account_mismatch');
+      return identity;
+    }catch(e){e.phase='facebook_identity';throw e;}
+  }
+  async checkFacebookConnection(){
+    const publishingEnabled=this.settings.publishingEnabled&&this.env.FB_PUBLISH_ENABLED==='true';
+    if(!/^v\d+\.\d+$/.test(this.env.META_GRAPH_VERSION||'')||!this.env.FB_PAGE_ACCESS_TOKEN)throw error(503,'channel_not_configured');
+    if(this.env.FB_PAGE_ID&&this.env.FB_PAGE_ID!==TARGETS.facebook)throw error(409,'account_mismatch');
+    const identity=await this.facebookIdentity();
+    return {pageId:identity.id,pageName:identity.name=== '스파이미디어'?identity.name:'스파이미디어 Page',identityVerified:true,publishingPermissionsVerified:false,publishingEnabled};
   }
   async publish(job,context) {
     if(!this.settings.publishingEnabled||!this.availability()[job.channel])throw error(503,'channel_not_configured');
@@ -63,13 +79,18 @@ class Connectors {
   }
   async facebook(job,ctx) {
     const root='https://graph.facebook.com/'+this.env.META_GRAPH_VERSION,id=TARGETS.facebook,token=this.env.FB_PAGE_ACCESS_TOKEN;
-    const call=(method,route,body)=>this.request(method,root+'/'+route,token,body);
-    const identity=(await call('GET','me?fields=id,name')).data;if(identity.id!==id)throw error(409,'account_mismatch');
+    const call=async(method,route,body,phase)=>{try{return await this.request(method,root+'/'+route,token,body);}catch(e){if(phase)e.phase=phase;throw e;}};
+    await this.facebookIdentity();
     let postId;
     if(job.type==='link'){
-      await ctx.beforePublication({});postId=identifier((await call('POST',id+'/feed',{message:caption(job.input),link:job.input.youtubeUrl})).data.id);
-      await ctx.checkpoint({externalId:postId});const result=(await call('GET',postId+'?fields=id,permalink_url')).data;
-      if(result.id!==postId)throw error(502,'verify_publication',true);return {externalId:postId,url:result.permalink_url||null};
+      try{
+        await ctx.beforePublication({});postId=identifier((await call('POST',id+'/feed',{message:caption(job.input),link:job.input.youtubeUrl},'facebook_link_create')).data?.id);
+      }catch(e){e.phase='facebook_link_create';throw e;}
+      await ctx.checkpoint({externalId:postId});
+      try{
+        const result=(await call('GET',postId+'?fields=id,permalink_url',undefined,'facebook_link_verify')).data;
+        if(result?.id!==postId)throw error(502,'verify_publication',true);return {externalId:postId,url:result.permalink_url||null};
+      }catch(e){e.phase='facebook_link_verify';throw e;}
     }
     if(job.assets[0].kind==='video') {
       await ctx.beforePublication({});

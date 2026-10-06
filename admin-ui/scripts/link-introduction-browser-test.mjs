@@ -15,12 +15,13 @@ const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAY
 const output=fileURLToPath(new URL('../test-results/link-introduction/',import.meta.url));await fs.mkdir(output,{recursive:true});
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'spymedia-link-browser-'));
 const checks=[],errors=[],external=[],ok=m=>{checks.push(m);console.log('PASS '+m);};
-let conversionCalls=0,posts=0,importCalls=0,thumbnailFails=false,delayResolve,delayEntered;
+let conversionCalls=0,posts=0,importCalls=0,thumbnailFails=false,delayResolve,delayEntered,facebookChecks=0,diagnosticClock=1000,facebookFails=false;
+const diagnosticSecret=randomBytes(24).toString('hex');
 const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'true',YOUTUBE_API_KEY:randomBytes(12).toString('hex')});
 const store=new Store(settings);await store.init();
-const connectors={availability:()=>({facebook:true,x:false,blog:true,instagram:true,youtube:false}),publish:async job=>{assert.equal(job.type,'link');assert.equal(job.channel,'facebook');posts++;return {externalId:'mock-only',url:'https://www.facebook.com/mock-only'};}};
+const connectors={checkFacebookConnection:async()=>{facebookChecks++;if(facebookFails)throw Object.assign(Error(diagnosticSecret),{status:409,code:'channel_auth_or_permission',phase:'facebook_identity',providerDetails:{httpStatus:403,providerCode:200,providerSubcode:463,providerType:'OAuthException',message:diagnosticSecret}});return {pageId:'1387247911137772',identityVerified:true,publishingPermissionsVerified:false,publishingEnabled:true,token:diagnosticSecret};},availability:()=>({facebook:true,x:false,blog:true,instagram:true,youtube:false}),publish:async job=>{assert.equal(job.type,'link');assert.equal(job.channel,'facebook');posts++;return {externalId:'mock-only',url:'https://www.facebook.com/mock-only'};}};
 const media={tools:async()=>{conversionCalls++;throw Error('Video probe prohibited');},convert:async()=>{conversionCalls++;throw Error('Video conversion prohibited');}};
-const service=new Service({settings,store,connectors,media});
+const service=new Service({settings,store,connectors,media,diagnosticNow:()=>diagnosticClock});
 const browser=await chromium.launch({headless:true}),context=await browser.newContext({viewport:{width:1440,height:1100}});
 await context.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.__copied=text;}}});});
 const page=await context.newPage();
@@ -53,6 +54,19 @@ try{
   await page.goto(origin+'/admin/instagram');await page.waitForURL(origin+'/admin/login');
   await page.fill('#login-id','synthetic');await page.fill('#login-password',password);await page.click('#login-submit');await page.waitForURL(origin+'/admin');
   await page.waitForFunction(()=>!document.getElementById('import-youtube').disabled);
+  assert.equal(facebookChecks,0);await page.click('#facebook-check');
+  await page.waitForFunction(()=>document.getElementById('facebook-feedback').textContent.includes('Page 인증 확인됨'));
+  assert.match(await page.locator('#facebook-feedback').textContent(),/글쓰기 권한은 아직 검증하지/);assert.equal(facebookChecks,1);assert.equal(posts,0);
+  await page.click('#facebook-check');await page.waitForFunction(()=>document.getElementById('facebook-feedback').textContent.includes('1분에 한 번'));assert.equal(facebookChecks,1);assert.equal(posts,0);
+  ok('Explicit Facebook diagnosis verifies Page identity without sending and displays the shared one-minute limit');
+  diagnosticClock+=60000;facebookFails=true;await page.click('#facebook-check');
+  await page.waitForFunction(()=>document.getElementById('facebook-feedback').textContent.includes('Meta code 200'));
+  assert.match(await page.locator('#facebook-feedback').textContent(),/페이지 인증 확인.*HTTP 403.*Meta code 200.*subcode 463/);
+  assert.equal((await page.locator('body').textContent()).includes(diagnosticSecret),false);assert.equal(facebookChecks,2);assert.equal(posts,0);
+  await page.screenshot({path:path.join(output,'facebook-diagnosis-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:path.join(output,'facebook-diagnosis-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1100});
+  ok('Facebook failure shows only the phase and safe numeric codes; desktop/mobile diagnosis screenshots reveal no credential');
   await page.fill('#youtube-url','https://youtube.com.evil.invalid/watch?v=AbCdEf123_-');await page.click('#import-youtube');
   assert.equal(importCalls,0);assert.match(await page.locator('#youtube-feedback').textContent(),/올바른/);ok('Login protects the separate helper; an untrusted YouTube host is rejected before any lookup');
   await page.fill('#title','사용자가 쓰던 제목');await page.fill('#description','기존에 수정한 설명');
@@ -116,7 +130,7 @@ try{
   ok('A rejected blog photo preserves the draft and still prepares the independent Facebook/X links');
   assert.equal(conversionCalls,0);assert.equal(posts,1);assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   ok('Untrusted metadata is plain text; all provider responses are synthetic and zero real SNS requests occur');
-  await fs.writeFile(path.join(output,'verification.json'),JSON.stringify({checks,errors,external,mockOnly:true,realPublications:0,syntheticPosts:posts,videoToolCalls:conversionCalls,userBrowserSessionUsed:false,screenshots:['admin-desktop.png','admin-mobile.png','instagram-helper-desktop.png','instagram-helper-mobile.png']},null,2));
+  await fs.writeFile(path.join(output,'verification.json'),JSON.stringify({checks,errors,external,mockOnly:true,realPublications:0,syntheticPosts:posts,syntheticFacebookChecks:facebookChecks,videoToolCalls:conversionCalls,userBrowserSessionUsed:false,screenshots:['facebook-diagnosis-desktop.png','facebook-diagnosis-mobile.png','admin-desktop.png','admin-mobile.png','instagram-helper-desktop.png','instagram-helper-mobile.png']},null,2));
 }finally{
   delayResolve?.();await browser.close();await new Promise(r=>server.close(r));assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));await fs.rm(dir,{recursive:true,force:true});
 }

@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const {promisify} = require('node:util');
 const scrypt = promisify(crypto.scrypt);
 const {Service} = require('./backend/service.cjs');
+const {failureDetails,safeFailureCode}=require('./backend/diagnostics.cjs');
 const root = path.join(__dirname, 'public');
 const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'instagram-design.js'].map(file => ['/admin-assets/' + file, file]));
 const SESSION_MS = 30 * 60 * 1000;
@@ -91,6 +92,10 @@ function createAdminHandler(options = {}) {
           const body=await readJson(req);json(res,200,{video:await service.youtubeSource.fetch(body.url)});
         }else if(route.startsWith('/api/admin/media/')&&['GET','HEAD'].includes(req.method)){
           await service.sendMedia(req,res,url);
+        }else if(route==='/api/admin/facebook/check'&&req.method==='POST'){
+          const body=await readJson(req);
+          if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length||url.search){json(res,400,{error:'invalid_connection_check_input'});return true;}
+          json(res,200,{connection:await service.checkFacebookConnection()});
         }else if(route==='/api/admin/jobs'&&req.method==='GET'){
           json(res,200,{jobs:await service.jobs.list()});
         }else if(route==='/api/admin/jobs'&&req.method==='POST'){
@@ -117,7 +122,14 @@ function createAdminHandler(options = {}) {
       } else if (route === '/admin' || route === '/admin/') {
         if (authenticated) await file(res, 'admin.html'); else { res.writeHead(303, {'Location':'/admin/login'}); res.end(); }
       } else json(res, 404, {error:'Not found'});
-    } catch (error) { if (!res.headersSent) json(res, error.status || 500, {error:error.status&&error.code?error.code:'request_failed'}); else res.end(); }
+    } catch (error) {
+      if(!res.headersSent){
+        const diagnostic=route==='/api/admin/facebook/check',details=failureDetails(error);
+        const status=Number.isInteger(error.status)&&error.status>=400&&error.status<=599?error.status:500;
+        const retry=diagnostic&&Number.isInteger(error.retryAfter)&&error.retryAfter>0&&error.retryAfter<=60?{'Retry-After':String(error.retryAfter)}:{};
+        json(res,status,{error:diagnostic?safeFailureCode(error.code):error.status&&error.code?error.code:'request_failed',...(details?{details}:{})},retry);
+      }else res.end();
+    }
     return true;
   };
 }

@@ -18,6 +18,18 @@ class Service {
     this.catalog=new Catalog(this.store,this.jobs);
     this.photos=options.photos||new Photos(this.store);
     this.youtubeSource=options.youtubeSource||new YouTubeSource(this.settings,this.photos);
+    this.diagnosticNow=options.diagnosticNow||Date.now;this.facebookCheckBusy=false;this.facebookCheckNextAt=0;
+  }
+  async checkFacebookConnection(){
+    const now=this.diagnosticNow();
+    if(this.facebookCheckBusy||now<this.facebookCheckNextAt)throw Object.assign(error(429,'facebook_check_rate_limited'),{retryAfter:Math.max(1,Math.ceil((this.facebookCheckNextAt-now)/1000))});
+    // One shared server credential: throttle across all administrator sessions, including failed checks.
+    this.facebookCheckNextAt=now+60000;this.facebookCheckBusy=true;
+    try{
+      const result=await this.connectors.checkFacebookConnection();
+      if(result?.identityVerified!==true||result.pageId!=='1387247911137772')throw error(409,'account_mismatch');
+      return {pageId:'1387247911137772',pageName:'스파이미디어',identityVerified:true,publishingPermissionsVerified:false,publishingEnabled:result.publishingEnabled===true};
+    }finally{this.facebookCheckBusy=false;}
   }
   async status() {
     let storage=false;try{if(this.settings.storageConfigured){await this.store.init();storage=true;}}catch{}

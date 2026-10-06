@@ -3,6 +3,7 @@ const {error} = require('./errors.cjs');
 const {caption,xLength} = require('./connectors.cjs');
 const {PROTECTED} = require('./catalog.cjs');
 const {parseYouTubeUrl}=require('./links.cjs');
+const {failureDetails,logJobFailure}=require('./diagnostics.cjs');
 const CHANNELS = ['youtube','instagram','x','facebook','blog'];
 const now = () => new Date().toISOString();
 function input(body) {
@@ -14,7 +15,7 @@ function input(body) {
   return result;
 }
 class Jobs {
-  constructor(settings,store,media,connectors) {this.settings=settings;this.store=store;this.media=media;this.connectors=connectors;this.tail=Promise.resolve();}
+  constructor(settings,store,media,connectors,options={}) {this.failureLogger=options.failureLogger||logJobFailure;this.settings=settings;this.store=store;this.media=media;this.connectors=connectors;this.tail=Promise.resolve();}
   enqueue(fn) {this.tail=this.tail.then(fn).catch(()=>{});}
   async create(body) {
     if(body?.type==='link')return this.createLink(body);
@@ -66,7 +67,7 @@ class Jobs {
       const key=crypto.createHash('sha256').update(JSON.stringify({version:1,channel,input:content,media:originals.map(m=>m.sha256)})).digest('hex');
       const existing=Object.values(state.jobs).find(j=>j.key===key);if(existing?.trashedAt)throw error(409,'job_in_trash');
       if(existing){
-        if(existing.status==='failed'&&existing.error==='interrupted'&&!existing.publicationAttempted){resumeIds.add(existing.id);return {...existing,status:existing.assets.length===existing.mediaIds.length?'prepared':'converting',preparationStarted:false,error:null,updatedAt:now()};}
+        if(existing.status==='failed'&&existing.error==='interrupted'&&!existing.publicationAttempted){resumeIds.add(existing.id);return {...existing,status:existing.assets.length===existing.mediaIds.length?'prepared':'converting',preparationStarted:false,error:null,errorDetails:null,updatedAt:now()};}
         return {...existing};
       }
       const job={id:crypto.randomUUID(),key,channel,input:content,mediaIds:originals.map(m=>m.id),status:channel==='blog'&&originals[0].kind==='image'?'prepared':'converting',assets:[],createdAt:now(),updatedAt:now(),publicationAttempted:false};
@@ -106,14 +107,14 @@ class Jobs {
     try {
       const result=await this.connectors.publish(job,{assetPath:asset=>this.store.file(asset.id,true),checkpoint,beforePublication:values=>checkpoint({...values,publicationAttempted:true})});
       await checkpoint({status:'succeeded',result});
-    }catch(e){await checkpoint({status:job.publicationAttempted||e.uncertain?'unknown':'failed',error:e.code||'channel_request_failed'});}
+     }catch(e){const details=failureDetails(e);await checkpoint({status:job.publicationAttempted||e.uncertain?'unknown':'failed',error:e.code||'channel_request_failed',errorDetails:details});if(job.channel==='facebook')try{this.failureLogger(job,details);}catch{} }
   }
   async retry(id) {
     await this.store.transaction(state=>{
       const job=state.jobs[id];if(!job||job.status!=='failed'||job.publicationAttempted)throw error(409,'check_channel_before_retry');
       if(job.type!=='link'&&!this.settings.legacyPreparationEnabled)throw error(409,'legacy_operation_disabled');
       if(job.trashedAt)throw error(409,'job_in_trash');if(job.mediaIds.some(mediaId=>state.media[mediaId]?.trashedAt))throw error(409,'media_in_trash');
-      Object.assign(job,{status:job.type==='link'||job.assets.length===job.mediaIds.length?'prepared':'converting',preparationStarted:false,error:null,updatedAt:now()});
+      Object.assign(job,{status:job.type==='link'||job.assets.length===job.mediaIds.length?'prepared':'converting',preparationStarted:false,error:null,errorDetails:null,updatedAt:now()});
     });
     if((await this.store.job(id)).status==='converting')this.enqueue(()=>this.prepare(id));
     return this.list();
@@ -125,7 +126,7 @@ class Jobs {
       const media=this.store.state.media[id];
       return {kind:media?.kind||null,name:typeof media?.name==='string'&&media.name?media.name:null};
     });
-    return {id:job.id,type:job.type||'legacy',youtubeUrl:job.input.youtubeUrl||null,legacyReadOnly,channel:job.channel,status:job.status,error:job.error||null,trashedAt:job.trashedAt||null,mediaInTrash,canTrash:!job.trashedAt&&!PROTECTED.has(job.status),canSend:!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='prepared'&&!job.publicationAttempted,canRetry:!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='failed'&&!job.publicationAttempted,title:job.input.title,caption:caption(job.input),sourceMedia,createdAt:job.createdAt,updatedAt:job.updatedAt,result:job.result||null,assets:job.assets.map(a=>({id:a.id,kind:a.kind,type:a.type,size:a.size,width:a.width,height:a.height,duration:a.duration,preview:'/api/admin/media/'+a.id+(a.original?'?preview=1':'?converted=1')})),originals:job.channel==='blog'?job.mediaIds.map(id=>({id,download:'/api/admin/media/'+id})):[],manuscript:job.manuscript||null,youtubePrivacy:job.channel==='youtube'?job.input.youtubePrivacy:null,madeForKids:job.channel==='youtube'?job.input.madeForKids:null};
+    return {id:job.id,type:job.type||'legacy',youtubeUrl:job.input.youtubeUrl||null,legacyReadOnly,channel:job.channel,status:job.status,error:job.error||null,errorDetails:failureDetails(job.errorDetails||{}),trashedAt:job.trashedAt||null,mediaInTrash,canTrash:!job.trashedAt&&!PROTECTED.has(job.status),canSend:!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='prepared'&&!job.publicationAttempted,canRetry:!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='failed'&&!job.publicationAttempted,title:job.input.title,caption:caption(job.input),sourceMedia,createdAt:job.createdAt,updatedAt:job.updatedAt,result:job.result||null,assets:job.assets.map(a=>({id:a.id,kind:a.kind,type:a.type,size:a.size,width:a.width,height:a.height,duration:a.duration,preview:'/api/admin/media/'+a.id+(a.original?'?preview=1':'?converted=1')})),originals:job.channel==='blog'?job.mediaIds.map(id=>({id,download:'/api/admin/media/'+id})):[],manuscript:job.manuscript||null,youtubePrivacy:job.channel==='youtube'?job.input.youtubePrivacy:null,madeForKids:job.channel==='youtube'?job.input.madeForKids:null};
   }
   async list() {await this.store.init();return Object.values(this.store.state.jobs).filter(job=>!job.trashedAt).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,100).map(j=>this.view(j));}
 }
