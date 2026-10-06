@@ -5,7 +5,7 @@ const {promisify} = require('node:util');
 const scrypt = promisify(crypto.scrypt);
 const {Service} = require('./backend/service.cjs');
 const root = path.join(__dirname, 'public');
-const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'server-ui.js'].map(file => ['/admin-assets/' + file, file]));
+const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'server-ui.js', 'catalog-ui.js'].map(file => ['/admin-assets/' + file, file]));
 const SESSION_MS = 30 * 60 * 1000;
 const LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
@@ -97,6 +97,10 @@ function createAdminHandler(options = {}) {
           const body=await readJson(req);json(res,202,{jobs:await service.jobs.start(body.ids)});
         }else if(route==='/api/admin/jobs/retry'&&req.method==='POST'){
           const body=await readJson(req);json(res,202,{jobs:await service.jobs.retry(body.id)});
+        }else if(route==='/api/admin/catalog'&&req.method==='GET'){
+          json(res,200,await service.catalog.list({kind:url.searchParams.get('kind')||'media',bin:url.searchParams.get('bin')||'active',offset:Number(url.searchParams.get('offset')||0),limit:Number(url.searchParams.get('limit')||20)}));
+        }else if(['/api/admin/catalog/trash','/api/admin/catalog/restore'].includes(route)&&req.method==='POST'){
+          const body=await readJson(req);json(res,200,await service.catalog.change(body.kind,body.ids,route.endsWith('/restore')));
         }else json(res,404,{error:'not_found'});
       } else if (req.method !== 'GET') {
         json(res, 405, {error:'Method not allowed'}, {'Allow':'GET'});

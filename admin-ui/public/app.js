@@ -6,7 +6,7 @@ const state = {video: null, images: [], imageIndex: 0, tags: [], suggestions: []
 let toastTimer;
 let backendStatus;
 const channelStates=new Map();
-function channelLabel(id){if(id==='blog')return '원고 준비 · 반자동';return channelStates.get(id)|| (backendStatus?.channels?.[id]?.configured?'계정 검증 대기':'연결 전');}
+function channelLabel(id){if(id==='blog')return '원고 준비 · 반자동';return backendStatus?.channels?.[id]?.configured?'서버 설정 준비 · 인증 미검증':'서버 설정 필요';}
 function element(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -156,7 +156,7 @@ function renderPreview() {
   $('#preview-content').hidden = false;
   const channel = CHANNELS.find(item => item.id === state.active) || CHANNELS[0];
   $('#preview-content').setAttribute('aria-labelledby', `tab-${channel.id}`);
-  for (const [selector, value] of Object.entries({'#preview-account':channel.account, '#preview-channel-name':channel.name, '#detail-name':channel.name, '#detail-account':channel.account, '#detail-format':channel.format, '#detail-status':channelLabel(channel.id), '#preview-avatar':channel.initial})) $(selector).textContent = value;
+  for (const [selector, value] of Object.entries({'#preview-account':channel.account, '#preview-channel-name':channel.name, '#detail-name':channel.name, '#detail-account':channel.account, '#detail-format':channel.format, '#detail-status':channelLabel(channel.id), '#detail-job-status':channelStates.get(channel.id)||'작업 기록 없음', '#preview-avatar':channel.initial})) $(selector).textContent = value;
   const title = $('#title').value.trim(); const description = $('#description').value.trim();
   $('#preview-title').textContent = title || '제목을 입력하세요'; $('#preview-description').textContent = description || '입력한 설명이 여기에 표시됩니다.';
   $('#preview-tags').textContent = state.tags.map(tag => `#${tag}`).join(' ');
@@ -206,13 +206,13 @@ $('#logout-button').addEventListener('click', async () => {
 window.addEventListener('beforeunload', () => { revoke(state.video); state.images.forEach(revoke); });
 window.addEventListener('sns-job-status',event=>{
   const labels={converting:'규격 변환 중',prepared:'전송 준비',queued:'전송 대기',publishing:'전송 확인 중',succeeded:'완료',failed:'실패',unknown:'결과 확인 필요'};
-  channelStates.clear();for(const job of event.detail)if(job.channel!=='blog'&&!channelStates.has(job.channel))channelStates.set(job.channel,labels[job.status]);renderChannels();renderPreview();
+  channelStates.clear();for(const job of event.detail)if(job.channel!=='blog'&&!channelStates.has(job.channel))channelStates.set(job.channel,'최근 작업: '+labels[job.status]);renderChannels();renderPreview();
 });
 try {
   const response = await fetch('/api/admin/status', {cache:'no-store'}); if (!response.ok) throw new Error('status');
   const status = await response.json();
   backendStatus=status;
-  if (status.mode !== 'preview' && !status.authenticated) location.replace('/admin/login');
+  if (status.mode !== 'preview' && !status.authenticated) location.replace('/admin/login?reason=session_expired');
   const preview = status.mode === 'preview';
   $('#mode-label').textContent = preview ? '로컬 미리보기' : '관리자 세션';
   $('#mode-note').textContent = preview ? '미리보기 모드입니다. 실제 계정 인증과 서버 업로드·자동 게시 기능은 연결 전입니다.' : status.uploadsConnected ? '관리자 로그인과 원본 보관·변환이 준비되었습니다. 채널별 전송 설정과 결과를 확인하세요.' : '관리자 로그인이 확인되었습니다. 원본 보관·변환 설정을 확인해야 전송을 준비할 수 있습니다.';

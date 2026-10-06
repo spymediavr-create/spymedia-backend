@@ -6,12 +6,14 @@ const {Store} = require('./store.cjs');
 const {Media} = require('./media.cjs');
 const {Jobs} = require('./jobs.cjs');
 const {Connectors} = require('./connectors.cjs');
+const {Catalog} = require('./catalog.cjs');
 const {error} = require('./errors.cjs');
 class Service {
   constructor(options={}) {
     this.settings=options.settings||config();this.store=options.store||new Store(this.settings);this.media=options.media||new Media(this.settings,this.store);
     this.connectors=options.connectors||new Connectors(this.settings,{mediaUrl:asset=>this.signedUrl(asset)});
     this.jobs=new Jobs(this.settings,this.store,this.media,this.connectors);
+    this.catalog=new Catalog(this.store,this.jobs);
   }
   async status() {
     let storage=false;try{if(this.settings.storageConfigured){await this.store.init();storage=true;}}catch{}

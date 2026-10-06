@@ -2,6 +2,7 @@ const form = document.querySelector('#login-form');
 const button = document.querySelector('#login-submit');
 const feedback = document.querySelector('#login-feedback');
 const password = document.querySelector('#login-password');
+if(new URLSearchParams(location.search).get('reason')==='session_expired')feedback.textContent='로그인이 만료됐습니다. 서버 재시작이나 로그인 제한 시간 경과 때 발생할 수 있습니다. 다시 로그인하면 서버에 보관한 콘텐츠를 확인할 수 있습니다.';
 document.querySelector('#toggle-password').addEventListener('click', event => {
   const show = password.type === 'password';
   password.type = show ? 'text' : 'password';

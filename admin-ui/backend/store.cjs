@@ -31,7 +31,12 @@ class Store {
     const temp = path.join(this.root, crypto.randomUUID()+'.tmp');
     const handle = await fs.open(temp,'wx',0o600);
     try { await handle.writeFile(JSON.stringify(this.state)); await handle.sync(); } finally { await handle.close(); }
-    await fs.rename(temp,path.join(this.root,'journal.json'));
+    // Windows can briefly lock the destination after a read. Keep the old journal
+    // intact and retry the same atomic replacement; never unlink it to recover.
+    for(let attempt=0;;attempt++){
+      try{await fs.rename(temp,path.join(this.root,'journal.json'));break;}
+      catch(e){if(process.platform!=='win32'||!['EPERM','EACCES','EBUSY'].includes(e.code)||attempt>=9)throw e;await new Promise(resolve=>setTimeout(resolve,(attempt+1)*10));}
+    }
   }
   async transaction(fn) {
     await this.init();

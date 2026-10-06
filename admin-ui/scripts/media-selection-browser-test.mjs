@@ -31,6 +31,7 @@ const server=http.createServer(async(req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;
     if(req.method==='GET'&&pathname==='/api/admin/status')return json(res,{mode:'authenticated',authenticated:true,uploadsConnected:true,storageReady:true,publishingEnabled:true,csrfToken:'synthetic-local-fixture',channels:Object.fromEntries(['youtube','instagram','x','facebook','blog'].map(id=>[id,{configured:true,verified:false}]))});
     if(req.method==='GET'&&pathname==='/api/admin/jobs')return json(res,{jobs});
+    if(req.method==='GET'&&pathname==='/api/admin/catalog')return json(res,{kind:'media',bin:'active',offset:0,limit:20,total:0,items:[]});
     if(req.method==='GET'&&pathname==='/fixture.png'){res.writeHead(200,{'Content-Type':'image/png'});return res.end(png);}
     if(req.method==='GET'&&pathname==='/fixture.webm'){res.writeHead(200,{'Content-Type':'video/webm'});return res.end(video);}
     if(req.method==='POST') {
@@ -61,7 +62,7 @@ const server=http.createServer(async(req,res)=>{
       }
       return json(res,{error:'not_found'},404);
     }
-    const files=new Map([['/admin','admin.html'],...['styles.css','app.js','domain.js','server-ui.js'].map(name=>['/admin-assets/'+name,name])]);
+    const files=new Map([['/admin','admin.html'],...['styles.css','app.js','domain.js','server-ui.js','catalog-ui.js'].map(name=>['/admin-assets/'+name,name])]);
     const file=files.get(pathname);if(!file){res.writeHead(404);return res.end();}
     res.writeHead(200,{'Content-Type':file.endsWith('.html')?'text/html; charset=utf-8':file.endsWith('.css')?'text/css':'text/javascript; charset=utf-8'});res.end(await fs.readFile(path.join(root,file)));
   }catch(e){errors.push(e.message);if(!res.headersSent)json(res,{error:'mock_failure'},500);else res.end();}
