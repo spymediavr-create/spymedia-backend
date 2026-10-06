@@ -96,6 +96,10 @@ function createAdminHandler(options = {}) {
           const body=await readJson(req);
           if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length||url.search){json(res,400,{error:'invalid_connection_check_input'});return true;}
           json(res,200,{connection:await service.checkFacebookConnection()});
+        }else if(route==='/api/admin/x/check'&&req.method==='POST'){
+          const body=await readJson(req);
+          if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length||url.search){json(res,400,{error:'invalid_connection_check_input'});return true;}
+          json(res,200,{connection:await service.checkXConnection()});
         }else if(route==='/api/admin/jobs'&&req.method==='GET'){
           json(res,200,{jobs:await service.jobs.list()});
         }else if(route==='/api/admin/jobs'&&req.method==='POST'){
@@ -124,7 +128,7 @@ function createAdminHandler(options = {}) {
       } else json(res, 404, {error:'Not found'});
     } catch (error) {
       if(!res.headersSent){
-        const diagnostic=route==='/api/admin/facebook/check',details=failureDetails(error);
+        const diagnostic=['/api/admin/facebook/check','/api/admin/x/check'].includes(route),details=failureDetails(error);
         const status=Number.isInteger(error.status)&&error.status>=400&&error.status<=599?error.status:500;
         const retry=diagnostic&&Number.isInteger(error.retryAfter)&&error.retryAfter>0&&error.retryAfter<=60?{'Retry-After':String(error.retryAfter)}:{};
         json(res,status,{error:diagnostic?safeFailureCode(error.code):error.status&&error.code?error.code:'request_failed',...(details?{details}:{})},retry);

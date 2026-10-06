@@ -3,7 +3,7 @@ const {error} = require('./errors.cjs');
 const {caption,xLength} = require('./connectors.cjs');
 const {PROTECTED} = require('./catalog.cjs');
 const {parseYouTubeUrl}=require('./links.cjs');
-const {failureDetails,logJobFailure}=require('./diagnostics.cjs');
+const {failureDetails,logJobFailure,safeFailureCode}=require('./diagnostics.cjs');
 const CHANNELS = ['youtube','instagram','x','facebook','blog'];
 const now = () => new Date().toISOString();
 function input(body) {
@@ -107,7 +107,7 @@ class Jobs {
     try {
       const result=await this.connectors.publish(job,{assetPath:asset=>this.store.file(asset.id,true),checkpoint,beforePublication:values=>checkpoint({...values,publicationAttempted:true})});
       await checkpoint({status:'succeeded',result});
-     }catch(e){const details=failureDetails(e);await checkpoint({status:job.publicationAttempted||e.uncertain?'unknown':'failed',error:e.code||'channel_request_failed',errorDetails:details});if(job.channel==='facebook')try{this.failureLogger(job,details);}catch{} }
+     }catch(e){const details=failureDetails(e);await checkpoint({status:job.publicationAttempted||e.uncertain?'unknown':'failed',error:job.channel==='x'?safeFailureCode(e.code):e.code||'channel_request_failed',errorDetails:details});if(['facebook','x'].includes(job.channel))try{this.failureLogger(job,details);}catch{} }
   }
   async retry(id) {
     await this.store.transaction(state=>{

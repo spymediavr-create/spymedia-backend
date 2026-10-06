@@ -24,6 +24,14 @@ http://127.0.0.1:4310/admin/login 에서 **화면 미리보기**를 선택합니
 - Instagram 준비 도우미는 별도 창에서 제목·설명·해시태그를 정리하고 복사합니다. 메인 작성 내용을 유지하며 외부 창으로 opener를 전달하지 않습니다. Meta Business Suite에서 계정·파일·게시 유형을 직접 선택하고 문구를 붙여 넣어 최종 게시합니다. 파일/문구 자동 전달과 Instagram API 게시를 제공하지 않습니다.
 - 로그인은 서버의 scrypt 검증, HttpOnly/SameSite=Strict·운영 Secure 쿠키, 30분 만료, 실패 제한, 세션 교체·로그아웃을 유지합니다. 서버 재시작 후 재로그인이 필요합니다. 관리자 API·사진·Instagram 도우미 HTML은 로그인 전 차단합니다.
 
+## X 공식 API 자동화
+
+X는 기존 OAuth 1.0a 네 개 키의 HMAC-SHA1 서명 또는 OAuth 2.0 사용자 토큰을 지원합니다. OAuth 2.0 갱신은 기존 offline.access grant와 별도 암호화 키·영구 저장소로 회전된 토큰을 보관하고 동시 갱신을 하나로 묶습니다. 새 grant는 자동 생성하지 않습니다.
+
+**X 연결 확인**은 명시적 비용 안내와 확인 후 계정 조회 GET만 실행하며 갱신·게시를 실행하지 않습니다. URL 포함 글 생성의 현재 US$0.20와 조회 비용을 안내하고, 실제 비용 상한은 X Developer Console에 둡니다. 비용 확인값은 숫자 예산이 아닙니다. 로그인·Origin·CSRF·60초 제한, 오류 비밀 제거, 불확실한 게시·갱신 재시도 차단을 검증합니다.
+
+설정 이름·기존 인증 재사용·안전한 갱신 저장·운영 확인 순서는 [X-OPERATIONS.md](X-OPERATIONS.md)를 확인하세요. 코드 검증은 모의 API만 사용합니다. 코드 배포와 실제 X 인증·유료 조회·게시 승인은 별도로 관리합니다. 배포 초기에는 X 게시와 비용 확인 스위치를 모두 false로 유지합니다.
+
 ## Facebook 연결 진단
 
 관리자에서 **페이스북 연결 확인**을 누르면 기존 서버의 Page 인증정보로 `GET /me?fields=id,name` 한 번만 요청합니다. 새 토큰·권한을 만들거나 게시·재게시하지 않습니다. 대상 Page ID는 `1387247911137772`이며, 인증 성공도 글쓰기 권한이나 실제 게시 성공을 증명하지 않습니다.
@@ -50,6 +58,7 @@ node admin-ui/scripts/browser-test.mjs
 node admin-ui/scripts/link-introduction-browser-test.mjs
 node admin-ui/scripts/catalog-browser-test.mjs
 node admin-ui/scripts/compact-lists-browser-test.mjs
+node admin-ui/scripts/x-browser-test.mjs
 ```
 
 이전 `media-selection-browser-test.mjs`와 `server-browser-test.mjs` 진입점은 새 링크 검사로 연결됩니다. `media-test.mjs`는 남아 있는 이전 변환 모듈용 검사이며 현재 링크 흐름의 필수 검사가 아닙니다.

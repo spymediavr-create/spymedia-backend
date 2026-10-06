@@ -1,0 +1,51 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import http from 'node:http';
+import {randomBytes,scryptSync} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
+import assert from 'node:assert/strict';
+import {config} from '../backend/config.cjs';
+import {Store} from '../backend/store.cjs';
+import {Service} from '../backend/service.cjs';
+import {Connectors} from '../backend/connectors.cjs';
+import {createAdminHandler} from '../server-core.cjs';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const dir=await fs.mkdtemp(path.join(os.tmpdir(),'spymedia-x-browser-')),output=fileURLToPath(new URL('../test-results/x-automation/',import.meta.url));
+await fs.mkdir(output,{recursive:true});
+const checks=[],errors=[],external=[],calls=[],dialogs=[],random=()=>randomBytes(24).toString('hex');
+const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'true',X_AUTH_MODE:'oauth1',X_API_KEY:random(),X_API_SECRET:random(),X_ACCESS_TOKEN:random(),X_ACCESS_TOKEN_SECRET:random(),X_PUBLISH_ENABLED:'true',X_COST_LIMIT_ACKNOWLEDGED:'true'});
+const connectors=new Connectors(settings,{request:async(method,url,token,body,headers)=>{
+  calls.push({method,url});assert.equal(token,null);assert.match(headers.Authorization,/^OAuth /);
+  if(url.endsWith('/users/me'))return {data:{data:{id:'123456789012345',username:'spymedia_kor',name:'<script>window.upstreamUnsafe=true</script>'}}};
+  throw Error('No post or refresh is permitted in this UI test');
+}});
+const store=new Store(settings),service=new Service({settings,store,connectors,media:{}});
+await service.jobs.create({type:'link',title:'합성 X 검토',description:'합성 설명',xText:'합성 소개 문구',youtubeUrl:'https://www.youtube.com/watch?v=AbCdEf123_-',tags:[],channels:['x'],mediaIds:[]});
+const salt=randomBytes(16),password=random(),handler=createAdminHandler({mode:'authenticated',username:'synthetic',passwordHash:salt.toString('hex')+':'+scryptSync(password,salt,64).toString('hex'),secureCookie:false,service});
+const server=http.createServer((req,res)=>handler(req,res).then(done=>{if(!done){res.writeHead(404);res.end();}}).catch(()=>{errors.push('server handler failed');res.writeHead(500);res.end();}));
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
+let browser;
+const pass=value=>{checks.push(value);console.log('PASS '+value);};
+try{
+  browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1100}});
+  await context.route('**/*',route=>{if(new URL(route.request().url()).origin===origin)return route.continue();external.push('blocked external request');return route.abort();});
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  let accept=false;page.on('dialog',async dialog=>{dialogs.push(dialog.message());await (accept?dialog.accept():dialog.dismiss());});
+  await page.goto(origin+'/admin/login');await page.locator('#login-id').fill('synthetic');await page.locator('#login-password').fill(password);await page.locator('#login-submit').click();await page.waitForURL(origin+'/admin');
+  await page.locator('#server-jobs .job-card').waitFor();assert.equal(calls.length,0);pass('page load and job polling make zero X API calls');
+  assert.match(await page.locator('#x-cost-note').textContent(),/US\$0\.20/);assert.match(await page.locator('#x-cost-note').textContent(),/금액 상한을 적용하지 않습니다/);pass('URL-post price and real Console spending cap are explicit');
+  assert.equal(await page.locator('#x-check').isEnabled(),true);await page.locator('#x-check').click();assert.equal(calls.length,0);assert.match(dialogs.at(-1),/조회 비용/);pass('cancelled connection confirmation calls no API');
+  accept=true;await page.locator('#x-check').click();await page.waitForFunction(()=>document.getElementById('x-feedback').textContent.includes('인증 확인됨'));
+  assert.equal(calls.length,1);assert.equal(calls[0].method,'GET');assert.match(await page.locator('#x-feedback').textContent(),/OAuth 1\.0a/);assert.match(await page.locator('#x-feedback').textContent(),/글쓰기 권한은 아직 검증하지 않았습니다/);assert.equal(await page.evaluate(()=>window.upstreamUnsafe),undefined);pass('connection check uses one mocked GET and shows fixed safe identity');
+  accept=false;await page.locator('#server-jobs .job-card input[type="checkbox"]').check();await page.locator('#start-server').click();assert.match(dialogs.at(-1),/US\$0\.20/);assert.match(dialogs.at(-1),/합성 소개 문구/);assert.match(dialogs.at(-1),/조회 비용 별도/);assert.equal(calls.length,1);pass('selected X send confirms exact saved content and price; cancellation sends nothing');
+  assert.equal(await page.locator('#server-jobs .job-card .record-details').isVisible(),false);pass('compact job details remain collapsed');
+  await page.locator('#x-copy-heading').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(output,'x-desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'x-mobile.png'),fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);pass('mobile X controls fit without horizontal overflow');
+  settings.env.X_COST_LIMIT_ACKNOWLEDGED='false';await page.reload();await page.locator('#server-jobs .job-card').waitFor();assert.equal(await page.locator('#x-check').isDisabled(),true);assert.match(await page.locator('#x-feedback').textContent(),/비용 확인/);assert.equal(await page.locator('#server-jobs .job-card input[type="checkbox"]').isDisabled(),true);assert.equal(calls.length,1);pass('unacknowledged API costs disable diagnosis and sending without a request');
+  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);assert.ok(calls.every(c=>c.method==='GET'));pass('zero live SNS requests, zero posts/refreshes and zero external browser requests');
+  await fs.writeFile(path.join(output,'summary.json'),JSON.stringify({checks,errors,external,mockedXRequests:calls,actualXRequests:0,posts:0,refreshes:0},null,2));
+}finally{
+  await browser?.close();await new Promise(resolve=>server.close(resolve));assert.equal(path.dirname(path.resolve(dir)),path.resolve(os.tmpdir()));await fs.rm(dir,{recursive:true,force:true});
+}

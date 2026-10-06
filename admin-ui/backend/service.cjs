@@ -18,7 +18,7 @@ class Service {
     this.catalog=new Catalog(this.store,this.jobs);
     this.photos=options.photos||new Photos(this.store);
     this.youtubeSource=options.youtubeSource||new YouTubeSource(this.settings,this.photos);
-    this.diagnosticNow=options.diagnosticNow||Date.now;this.facebookCheckBusy=false;this.facebookCheckNextAt=0;
+    this.diagnosticNow=options.diagnosticNow||Date.now;this.facebookCheckBusy=false;this.facebookCheckNextAt=0;this.xCheckBusy=false;this.xCheckNextAt=0;
   }
   async checkFacebookConnection(){
     const now=this.diagnosticNow();
@@ -31,9 +31,19 @@ class Service {
       return {pageId:'1387247911137772',pageName:'스파이미디어',identityVerified:true,publishingPermissionsVerified:false,publishingEnabled:result.publishingEnabled===true};
     }finally{this.facebookCheckBusy=false;}
   }
+  async checkXConnection(){
+    const now=this.diagnosticNow();
+    if(this.xCheckBusy||now<this.xCheckNextAt)throw Object.assign(error(429,'x_check_rate_limited'),{retryAfter:Math.max(1,Math.ceil((this.xCheckNextAt-now)/1000))});
+    this.xCheckNextAt=now+60000;this.xCheckBusy=true;
+    try{
+      const result=await this.connectors.checkXConnection();
+      if(result?.identityVerified!==true||result.username!=='spymedia_kor'||typeof result.userId!=='string'||!/^\d{1,30}$/.test(result.userId))throw error(409,'account_mismatch');
+      return {userId:result.userId,username:'spymedia_kor',identityVerified:true,publishingPermissionsVerified:false,authMode:['oauth1','oauth2'].includes(result.authMode)?result.authMode:null,refreshConfigured:result.refreshConfigured===true,publishingEnabled:result.publishingEnabled===true};
+    }finally{this.xCheckBusy=false;}
+  }
   async status() {
     let storage=false;try{if(this.settings.storageConfigured){await this.store.init();storage=true;}}catch{}
-    return {uploadsConnected:storage,storageReady:storage,conversionReady:false,youtubeImportReady:!!this.settings.env.YOUTUBE_API_KEY,legacyPreparationDisabled:!this.settings.legacyPreparationEnabled,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
+    return {uploadsConnected:storage,storageReady:storage,conversionReady:false,youtubeImportReady:!!this.settings.env.YOUTUBE_API_KEY,legacyPreparationDisabled:!this.settings.legacyPreparationEnabled,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,xConnection:this.connectors.xAuth?.describe()||{authMode:null,credentialsConfigured:false,refreshConfigured:false,costAcknowledged:false,publishingPermissionsVerified:false},channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
   }
   signedUrl(asset) {
     if(!this.settings.mediaKey||!this.settings.origin)throw error(503,'media_delivery_unavailable');

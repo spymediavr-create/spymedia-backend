@@ -6,10 +6,10 @@ const $=id=>document.getElementById(id);
 const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
 const date=value=>value?new Date(value).toLocaleString('ko-KR'):'기록 없음';
 export function formatFailureDetails(details={}) {
-  const parts=[],phases={facebook_identity:'페이지 인증 확인',facebook_link_create:'링크 소개 요청',facebook_link_verify:'게시 결과 확인'};
+  const parts=[],phases={facebook_identity:'페이지 인증 확인',facebook_link_create:'링크 소개 요청',facebook_link_verify:'게시 결과 확인',x_identity:'X 계정 인증 확인',x_link_create:'X 링크 소개 요청',x_link_verify:'X 게시 결과 확인',x_token_refresh:'X 인증 갱신'};
   if(phases[details.phase])parts.push('단계: '+phases[details.phase]);
   if(Number.isInteger(details.httpStatus)&&details.httpStatus>=100&&details.httpStatus<=599)parts.push('HTTP '+details.httpStatus);
-  if(Number.isInteger(details.providerCode)&&details.providerCode>=0)parts.push('Meta code '+details.providerCode);
+  if(Number.isInteger(details.providerCode)&&details.providerCode>=0)parts.push((details.phase?.startsWith('x_')?'X code ':'Meta code ')+details.providerCode);
   if(Number.isInteger(details.providerSubcode)&&details.providerSubcode>=0)parts.push('subcode '+details.providerSubcode);
   return parts.join(' · ');
 }

@@ -32,13 +32,13 @@ YouTube 조회에는 기존 `YOUTUBE_API_KEY`만 재사용합니다. 키 값은 
 |---|---|---|
 | YouTube | `@spymedia3645` 본편 원본, 공개 메타데이터 조회 | 기존 `YOUTUBE_API_KEY`; 업로드 OAuth 불필요 |
 | Facebook | 스파이미디어 Page `1387247911137772`, feed 링크 소개 | `FB_PAGE_ACCESS_TOKEN`, `FB_PUBLISH_ENABLED=true`, 앱에서 확인한 `META_GRAPH_VERSION`; 매 전송 전 Page ID 확인 |
-| X | `spymedia_kor`, text 소개 + YouTube 주소 | `X_USER_ACCESS_TOKEN`, `X_PUBLISH_ENABLED=true`, `X_COST_LIMIT_ACKNOWLEDGED=true`; 사용자 인증 쓰기 권한과 비용 승인 확인 후 활성화 |
+| X | `spymedia_kor`, text 소개 + YouTube 주소 | 기존 OAuth 1.0a 네 개 키 또는 OAuth 2.0 사용자 인증; `X_PUBLISH_ENABLED=true`, 비용 확인값 `X_COST_LIMIT_ACKNOWLEDGED=true`는 실제 상한이 아님; [X 설정 안내](X-OPERATIONS.md) |
 | 블로그 | `blog.naver.com/spymedia`, 원고·사진 준비 | 사용자 최종 게시; 브라우저 매크로와 API 글쓰기 없음 |
 | Instagram | `spymedia_kr`, 별도 문구 준비 도우미 | Meta Business Suite에서 계정/파일/유형 선택·문구 붙여 넣기·최종 게시; 이 도우미의 API 발행 없음 |
 
 Facebook 권한은 기존 `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`와 Page 콘텐츠 접근을 확인합니다. 개인 프로필 `100069643772419`는 대상이 아닙니다. 필요성이 확인되지 않은 `business_management` 권한을 추가하지 않습니다. 링크 소개에는 미디어 서명 키와 영상 업로드 URL이 필요하지 않습니다. 기존 `MEDIA_SIGNING_KEY`와 이전 미디어 접근 경로는 변경하지 않습니다.
 
-X API 발급 사실과 현재 앱의 연결 완료는 다릅니다. 현재 연결·쓰기 권한·비용 한도는 미검증입니다. 설정이 불완전하면 전송 선택을 차단하고 준비·미리보기만 허용합니다. 값과 새 인증 권한을 모델에 요청하지 않습니다. 공식 사용자 인증 요구사항을 운영 연결 시 확인합니다.
+사용자는 이전 X API 연결·테스트를 확인했습니다. 현재 코드와 운영 인증 방식의 호환, 쓰기 권한·잔액·실제 콘솔 비용 상한은 별도로 확인해야 합니다. X 연결 진단·OAuth 1.0a 서명·OAuth 2.0 암호화 갱신 저장·비용 안내의 세부 내용은 [X-OPERATIONS.md](X-OPERATIONS.md)를 따릅니다. 설정이 불완전하면 전송 선택을 차단하고 준비·미리보기만 허용합니다. 값과 새 인증 권한을 모델에 요청하지 않습니다. 공식 사용자 인증 요구사항을 운영 연결 시 확인합니다.
 
 `SNS_PUBLISH_ENABLED`는 기존 전체 전송 스위치이며 코드 기본값은 false입니다. 설정 존재는 인증 검증 완료를 뜻하지 않습니다. 지정 계정 조회와 게시 ID 확인은 실제 전송 요청에서 이루어집니다. 이번 로컬 테스트는 전부 모의 응답이므로 실제 서비스 검증이 아닙니다.
 

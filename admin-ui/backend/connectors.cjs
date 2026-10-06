@@ -3,6 +3,7 @@ const fsp = require('node:fs/promises');
 const axios = require('axios');
 const {error} = require('./errors.cjs');
 const {providerFailure}=require('./diagnostics.cjs');
+const {XAuth}=require('./x-auth.cjs');
 const HOSTS = new Set(['graph.instagram.com','graph.facebook.com','graph-video.facebook.com','api.x.com','www.googleapis.com','oauth2.googleapis.com']);
 const TARGETS = {instagram:'spymedia_kr',facebook:'1387247911137772',x:'spymedia_kor',youtube:'UCw7OnhgTIih0M5PoMkwCDug'};
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
@@ -18,13 +19,13 @@ async function request(method,url,token,body,headers={},transport=axios) {
 function caption(input) {return typeof input.xText==='string'?[input.xText,input.youtubeUrl].filter(Boolean).join('\n\n'):[input.title,input.description,input.youtubeUrl,input.tags.map(tag=>'#'+tag).join(' ')].filter(Boolean).join('\n\n');}
 function xLength(text) {return [...text.replace(/https?:\/\/\S+/g,'x'.repeat(23))].reduce((n,ch)=>n+(/[\u1100-\u11ff\u2e80-\ua4cf\uac00-\ud7af\uf900-\ufaff]/u.test(ch)||ch.codePointAt(0)>0xffff?2:1),0);}
 class Connectors {
-  constructor(settings,options={}) {this.settings=settings;this.env=settings.env;this.request=options.request||request;this.sleep=options.sleep||sleep;this.mediaUrl=options.mediaUrl;}
+  constructor(settings,options={}) {this.settings=settings;this.env=settings.env;this.request=options.request||request;this.sleep=options.sleep||sleep;this.mediaUrl=options.mediaUrl;this.xAuth=options.xAuth||new XAuth(settings,this.request,options.xAuthOptions);}
   availability() {
     const e=this.env,v=/^v\d+\.\d+$/.test(e.META_GRAPH_VERSION||'');const urls=!!this.settings.origin&&!!this.settings.mediaKey;
     return {
       instagram:!!(v&&urls&&e.IG_USER_ID&&/^\d+$/.test(e.IG_USER_ID)&&e.IG_ACCESS_TOKEN&&e.IG_PUBLISH_ENABLED==='true'),
       facebook:!!(v&&e.FB_PAGE_ACCESS_TOKEN&&e.FB_PUBLISH_ENABLED==='true'&&(!e.FB_PAGE_ID||e.FB_PAGE_ID===TARGETS.facebook)),
-      x:!!(e.X_USER_ACCESS_TOKEN&&e.X_PUBLISH_ENABLED==='true'&&e.X_COST_LIMIT_ACKNOWLEDGED==='true'),
+      x:!!(this.xAuth.configured()&&e.X_PUBLISH_ENABLED==='true'&&e.X_COST_LIMIT_ACKNOWLEDGED==='true'),
       youtube:!!(e.YOUTUBE_OAUTH_CLIENT_ID&&e.YOUTUBE_OAUTH_CLIENT_SECRET&&e.YOUTUBE_OAUTH_REFRESH_TOKEN&&e.YOUTUBE_PUBLISH_ENABLED==='true'),blog:true
     };
   }
@@ -43,6 +44,19 @@ class Connectors {
     if(this.env.FB_PAGE_ID&&this.env.FB_PAGE_ID!==TARGETS.facebook)throw error(409,'account_mismatch');
     const identity=await this.facebookIdentity();
     return {pageId:identity.id,pageName:identity.name=== '스파이미디어'?identity.name:'스파이미디어 Page',identityVerified:true,publishingPermissionsVerified:false,publishingEnabled};
+  }
+  async xIdentity(allowRefresh=false){
+    try{
+      const identity=(await this.xAuth.call('GET','https://api.x.com/2/users/me',undefined,{allowRefresh})).data?.data;
+      if(identity?.username!==TARGETS.x)throw error(409,'account_mismatch');
+      return identity;
+    }catch(e){if(!e.phase)e.phase='x_identity';throw e;}
+  }
+  async checkXConnection(){
+    if(this.env.X_COST_LIMIT_ACKNOWLEDGED!=='true')throw error(409,'x_cost_confirmation_required');
+    const identity=await this.xIdentity(false);
+    if(typeof identity.id!=='string'||!/^\d{1,30}$/.test(identity.id))throw Object.assign(error(502,'invalid_channel_response'),{phase:'x_identity'});
+    return {userId:identity.id,username:TARGETS.x,identityVerified:true,publishingPermissionsVerified:false,authMode:this.xAuth.mode(),refreshConfigured:this.xAuth.describe().refreshConfigured,publishingEnabled:this.settings.publishingEnabled&&this.availability().x};
   }
   async publish(job,context) {
     if(!this.settings.publishingEnabled||!this.availability()[job.channel])throw error(503,'channel_not_configured');
@@ -116,11 +130,15 @@ class Connectors {
     if(result.id!==postId)throw error(502,'verify_publication',true);return {externalId:postId,url:result.permalink_url||null};
   }
   async x(job,ctx) {
-    const token=this.env.X_USER_ACCESS_TOKEN,root='https://api.x.com/2';const call=(method,route,body)=>this.request(method,root+'/'+route,token,body);
-    if((await call('GET','users/me')).data.data?.username!==TARGETS.x)throw error(409,'account_mismatch');
+    const root='https://api.x.com/2',call=(method,route,body)=>this.xAuth.call(method,root+'/'+route,body);
+    await this.xIdentity(true);
     if(job.type==='link'){
-      await ctx.beforePublication({});const postId=identifier((await call('POST','tweets',{text:caption(job.input)})).data.data?.id);await ctx.checkpoint({externalId:postId});
-      if((await call('GET','tweets/'+postId)).data.data?.id!==postId)throw error(502,'verify_publication',true);
+      let postId;
+      try{await ctx.beforePublication({});postId=identifier((await call('POST','tweets',{text:caption(job.input)})).data?.data?.id);}
+      catch(e){if(!e.phase)e.phase='x_link_create';throw e;}
+      await ctx.checkpoint({externalId:postId});
+      try{if((await call('GET','tweets/'+postId)).data?.data?.id!==postId)throw error(502,'verify_publication',true);}
+      catch(e){if(!e.phase)e.phase='x_link_verify';throw e;}
       return {externalId:postId,url:'https://x.com/'+TARGETS.x+'/status/'+postId};
     }
     const ids=[];
