@@ -5,12 +5,32 @@ const STATES={converting:'규격 변환 중',prepared:'전송 준비',queued:'�
 const $=id=>document.getElementById(id);
 const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
 const date=value=>value?new Date(value).toLocaleString('ko-KR'):'기록 없음';
+const X_REASONS=new Map([
+  ['x_invalid_request',['invalid-request','요청 형식 오류']],
+  ['x_resource_not_found',['resource-not-found','대상 없음']],
+  ['x_not_authorized_for_resource',['not-authorized-for-resource','대상 접근 권한 없음']],
+  ['x_client_forbidden',['client-forbidden','앱 API 접근 제한']],
+  ['x_usage_capped',['usage-capped','사용량 한도 도달']],
+  ['x_rate_limit_exceeded',['rate-limit-exceeded','요청 횟수 제한']],
+  ['invalid_grant',['invalid_grant','기존 인증 승인 거절']],
+  ['invalid_client',['invalid_client','앱 인증 거절']],
+  ['unauthorized_client',['unauthorized_client','앱 인증 방식 거절']],
+  ['invalid_scope',['invalid_scope','요청 권한 오류']],
+  ['unsupported_grant_type',['unsupported_grant_type','지원하지 않는 인증 방식']],
+  ['temporarily_unavailable',['temporarily_unavailable','인증 서비스 일시 이용 불가']]
+]);
 export function formatFailureDetails(details={}) {
+  if(!details||typeof details!=='object'||Array.isArray(details))return '';
   const parts=[],phases={facebook_identity:'페이지 인증 확인',facebook_link_create:'링크 소개 요청',facebook_link_verify:'게시 결과 확인',x_identity:'X 계정 인증 확인',x_link_create:'X 링크 소개 요청',x_link_verify:'X 게시 결과 확인',x_token_refresh:'X 인증 갱신'};
-  if(phases[details.phase])parts.push('단계: '+phases[details.phase]);
+  const xPhase=typeof details.phase==='string'&&details.phase.startsWith('x_');
+  if(Object.hasOwn(phases,details.phase))parts.push('단계: '+phases[details.phase]);
   if(Number.isInteger(details.httpStatus)&&details.httpStatus>=100&&details.httpStatus<=599)parts.push('HTTP '+details.httpStatus);
-  if(Number.isInteger(details.providerCode)&&details.providerCode>=0)parts.push((details.phase?.startsWith('x_')?'X code ':'Meta code ')+details.providerCode);
+  if(Number.isInteger(details.providerCode)&&details.providerCode>=0&&details.providerCode<=2147483647)parts.push((xPhase?'X code ':'Meta code ')+details.providerCode);
   if(Number.isInteger(details.providerSubcode)&&details.providerSubcode>=0)parts.push('subcode '+details.providerSubcode);
+  if(xPhase&&Number.isInteger(details.httpStatus)&&details.httpStatus>=100&&details.httpStatus<=599){
+    const reason=X_REASONS.get(details.providerType);
+    parts.push(reason?'X 유형: '+reason[0]+' · 사유: '+reason[1]:'세부 원인: 알 수 없음 (안전한 오류 유형 없음)');
+  }
   return parts.join(' · ');
 }
 export function jobDiagnostics(job) {

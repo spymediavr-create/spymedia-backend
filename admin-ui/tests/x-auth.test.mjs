@@ -121,7 +121,7 @@ test('failure to store refresh intent blocks the outbound refresh before it is s
 });
 test('X errors retain only bounded codes and phases, never upstream messages or credentials',async()=>{
   const marker=random(),response={status:401,data:{errors:[{code:89,message:marker}],detail:marker},headers:{Authorization:marker}};
-  const safe=providerFailure(response,'GET','api.x.com');assert.deepEqual(safe.providerDetails,{httpStatus:401,providerCode:89});assert.equal(safe.code,'channel_auth_or_permission');
+  const safe=providerFailure(response,'GET','api.x.com');assert.deepEqual(safe.providerDetails,{httpStatus:401,providerCode:89});assert.equal(safe.code,'x_unauthorized');
   assert.deepEqual(failureDetails({phase:'x_identity',providerDetails:{...safe.providerDetails,message:marker,type:marker,url:marker}}),{httpStatus:401,providerCode:89,phase:'x_identity'});
   await assert.rejects(request('GET','https://api.x.com/2/users/me',marker,undefined,{},async()=>response),e=>!JSON.stringify(e).includes(marker));
   const original=console.error,logs=[];console.error=value=>logs.push(value);
