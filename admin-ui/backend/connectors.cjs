@@ -37,7 +37,11 @@ class Connectors {
       if(!this.describeInstagramConnection().credentialsConfigured)throw error(503,'instagram_not_configured');
       const identity=(await this.request('GET','https://graph.instagram.com/'+this.env.META_GRAPH_VERSION+'/'+this.env.IG_USER_ID+'?fields=id,username',this.env.IG_ACCESS_TOKEN)).data;
       if(typeof identity?.id!=='string'||!/^\d{1,30}$/.test(identity.id)||typeof identity.username!=='string')throw error(502,'invalid_channel_response');
-      if(identity.id!==this.env.IG_USER_ID||identity.username!==TARGETS.instagram)throw error(409,'account_mismatch');
+      if(identity.id!==this.env.IG_USER_ID||identity.username!==TARGETS.instagram){
+        const userIdPresent=Object.hasOwn(identity,'user_id'),userIdUsable=typeof identity.user_id==='string'&&/^\d{1,30}$/.test(identity.user_id);
+        // Compare only; never forward the identity, identifier values or provider payload.
+        throw Object.assign(error(409,'account_mismatch'),{identityComparison:{usernameMatches:identity.username===TARGETS.instagram,idMatches:identity.id===this.env.IG_USER_ID,userIdPresent,...(userIdUsable?{userIdMatchesConfigured:identity.user_id===this.env.IG_USER_ID,idMatchesUserId:identity.id===identity.user_id}:{})}});
+      }
       return {userId:identity.id,username:TARGETS.instagram,identityVerified:true};
     }catch(e){e.phase='instagram_identity';throw e;}
   }

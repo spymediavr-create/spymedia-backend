@@ -5,8 +5,25 @@ const state={status:null,verified:false,busy:false,file:null,photoUrl:null,jobs:
 const previewImage=make('img');previewImage.alt='선택한 사진 미리보기';previewImage.hidden=true;$('ig-placeholder').append(previewImage);
 const messages={instagram_not_configured:'Instagram 인증 설정이 필요합니다. 기존 앱의 연결 상태를 확인해 주세요.',channel_not_configured:'Instagram 전송 설정이 준비되지 않았습니다.',account_mismatch:'연결 계정이 spymedia_kr와 다릅니다. 전송을 중단했습니다.',channel_auth_or_permission:'Instagram 인증 또는 권한이 거절됐습니다. 기존 앱의 로그인과 게시 권한을 확인해 주세요.',instagram_check_rate_limited:'계정 확인은 1분에 한 번 가능합니다.',channel_rate_limit:'Instagram 요청 한도에 도달했습니다. 잠시 뒤 다시 확인하세요.',instagram_photo_only:'JPEG 사진 1장만 준비할 수 있습니다.',instagram_photo_dimensions:'사진 가로 크기와 비율을 확인해 주세요.',instagram_content_limits:'제목·설명·해시태그 합계를 2,200자 이하로 줄여 주세요.',invalid_draft:'제목과 설명, 해시태그를 확인해 주세요.',photo_too_large:'사진은 최대 8MB입니다.',invalid_photo_dimensions:'읽을 수 있는 JPEG 사진을 선택해 주세요.',media_in_trash:'사진이 휴지통에 있습니다. 보관함에서 복원해 주세요.',job_in_trash:'같은 준비 항목이 휴지통에 있습니다. 보관함에서 복원해 주세요.',job_not_ready:'전송 가능한 준비 항목을 다시 선택해 주세요.',check_channel_before_retry:'Instagram에서 게시 여부를 먼저 확인해 주세요. 자동 재전송은 중단됐습니다.',channel_media_processing:'Instagram에서 사진 처리를 완료하지 못했습니다.',channel_media_processing_timeout:'Instagram 사진 처리가 지연됐습니다.',channel_network_failure:'Instagram 응답을 확인하지 못했습니다.',verify_publication:'게시 결과를 확인하지 못했습니다. Instagram에서 먼저 확인해 주세요.',storage_unavailable:'사진 저장 공간 설정이 필요합니다.',storage_full:'사진 저장 공간이 부족합니다.',publishing_disabled:'관리자 전송 설정이 꺼져 있습니다.',csrf_rejected:'보안 확인에 실패했습니다. 화면을 새로고침해 주세요.'};
 const phases={instagram_identity:'계정 확인',instagram_photo_create:'사진 등록',instagram_photo_prepare:'사진 처리',instagram_photo_publish:'최종 전송',instagram_photo_verify:'게시 결과 확인'};
-function detail(value){if(!value)return '';return [phases[value.phase],Number.isInteger(value.httpStatus)?'HTTP '+value.httpStatus:null,Number.isInteger(value.providerCode)?'오류 '+value.providerCode:null,Number.isInteger(value.providerSubcode)?'세부 오류 '+value.providerSubcode:null].filter(Boolean).join(' · ');}
-function failure(e){return (messages[e.code]||'요청을 완료하지 못했습니다. 설정과 저장된 항목을 확인해 주세요.')+(detail(e.details)?' ('+detail(e.details)+')':'');}
+function comparison(value){const c=value?.identityComparison;return value?.phase==='instagram_identity'&&c&&typeof c.usernameMatches==='boolean'&&typeof c.idMatches==='boolean'?c:null;}
+function detail(value){
+  if(!value)return '';const c=comparison(value),parts=[phases[value.phase],Number.isInteger(value.httpStatus)?'HTTP '+value.httpStatus:null,Number.isInteger(value.providerCode)?'오류 '+value.providerCode:null,Number.isInteger(value.providerSubcode)?'세부 오류 '+value.providerSubcode:null];
+  if(c){
+    parts.push('계정명 '+(c.usernameMatches?'일치':'불일치'),'계정 번호 '+(c.idMatches?'일치':'불일치'));
+    if(c.userIdPresent===false)parts.push('API user_id 미반환');
+    else if(c.userIdPresent===true){parts.push('API user_id 반환됨');if(typeof c.userIdMatchesConfigured==='boolean')parts.push('user_id와 기존 번호 '+(c.userIdMatchesConfigured?'일치':'불일치'));if(typeof c.idMatchesUserId==='boolean')parts.push('id와 user_id '+(c.idMatchesUserId?'일치':'불일치'));}
+  }
+  return parts.filter(Boolean).join(' · ');
+}
+function failure(e){
+  let text=messages[e.code]||'요청을 완료하지 못했습니다. 설정과 저장된 항목을 확인해 주세요.';const c=comparison(e.details);
+  if(e.code==='account_mismatch'&&c){
+    if(c.usernameMatches&&!c.idMatches)text='계정명은 spymedia_kr와 일치하지만 계정 번호가 기존 설정과 다릅니다. 전송을 중단했습니다.';
+    else if(!c.usernameMatches&&c.idMatches)text='계정명이 spymedia_kr와 다릅니다. 계정 번호는 기존 설정과 일치합니다. 전송을 중단했습니다.';
+    else if(!c.usernameMatches&&!c.idMatches)text='계정명과 계정 번호가 모두 기존 설정과 다릅니다. 전송을 중단했습니다.';
+  }
+  return text+(detail(e.details)?' ('+detail(e.details)+')':'');
+}
 function feedback(text,success=false){$('ig-publish-feedback').textContent=text;$('ig-publish-feedback').classList.toggle('success-feedback',success);}
 async function api(route,{method='GET',body,headers={}}={}){
   const response=await fetch(route,{method,credentials:'same-origin',headers:{...(method!=='GET'?{'X-CSRF-Token':state.status?.csrfToken}:{}),...headers},...(body!==undefined?{body}: {})});

@@ -60,6 +60,39 @@ test('wrong Instagram account and malformed identity cause zero container or pub
     const result=(await f.service.jobs.list())[0];assert.equal(result.status,'failed');assert.equal(result.canRetry,true);assert.equal(result.errorDetails.phase,'instagram_identity');assert.ok(f.calls.every(c=>c.method==='GET'));
   }
 });
+test('Instagram mismatch diagnosis distinguishes the original guards without forwarding account values or accepting user_id instead of id',async t=>{
+  for(const [identity,expected] of [
+    [{id:userId,username:'synthetic_other_account'},{usernameMatches:false,idMatches:true,userIdPresent:false}],
+    [{id:'178414000000002',username:'spymedia_kr',user_id:userId},{usernameMatches:true,idMatches:false,userIdPresent:true,userIdMatchesConfigured:true,idMatchesUserId:false}],
+    [{id:'178414000000002',username:'synthetic_other_account',user_id:'178414000000002'},{usernameMatches:false,idMatches:false,userIdPresent:true,userIdMatchesConfigured:false,idMatchesUserId:true}],
+    [{id:userId,username:'SPYMEDIA_KR',user_id:null},{usernameMatches:false,idMatches:true,userIdPresent:true}]
+  ]){
+    const f=await fixture(t,{},async()=>({data:{...identity,token:secret,message:secret}}));
+    await assert.rejects(f.connector.checkInstagramConnection(),e=>{assert.equal(e.code,'account_mismatch');assert.deepEqual(failureDetails(e),{phase:'instagram_identity',identityComparison:expected});return true;});
+    const saved=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(saved.id));await f.service.jobs.start([job.id]);await f.service.jobs.tail;
+    const result=(await f.service.jobs.list())[0];assert.equal(result.status,'failed');assert.deepEqual(result.errorDetails.identityComparison,expected);assert.ok(f.calls.every(c=>c.method==='GET'));
+    const journal=JSON.stringify(f.store.state);for(const value of [secret,userId,'178414000000002','synthetic_other_account','SPYMEDIA_KR'])assert.equal(journal.includes(value),false);
+  }
+  for(const identity of [{id:userId},{id:userId,username:null},{id:userId,username:42}]){const f=await fixture(t,{},async()=>({data:identity}));await assert.rejects(f.connector.checkInstagramConnection(),e=>e.code==='invalid_channel_response'&&!failureDetails(e).identityComparison);}
+});
+test('identity comparisons retain only booleans for Instagram identity and remain absent from application logs',()=>{
+  const expected={phase:'instagram_identity',identityComparison:{usernameMatches:true,idMatches:false,userIdPresent:true,userIdMatchesConfigured:true,idMatchesUserId:false}};
+  const malicious={phase:'instagram_identity',identityComparison:{...expected.identityComparison,username:secret,id:secret,user_id:secret,token:secret,raw:{token:secret}}};
+  assert.deepEqual(failureDetails(malicious),expected);assert.deepEqual(failureDetails(failureDetails(malicious)),expected);
+  for(const phase of ['facebook_identity','x_identity','instagram_photo_publish'])assert.equal(failureDetails({...malicious,phase}).identityComparison,undefined);
+  for(const compare of [null,[],{usernameMatches:secret,idMatches:false},{usernameMatches:true,idMatches:secret}])assert.equal(failureDetails({phase:'instagram_identity',identityComparison:compare}).identityComparison,undefined);
+  assert.deepEqual(failureDetails({phase:'instagram_identity',identityComparison:{usernameMatches:true,idMatches:false,userIdPresent:false,userIdMatchesConfigured:true}}).identityComparison,{usernameMatches:true,idMatches:false,userIdPresent:false});
+  const logs=[],original=console.error;try{console.error=value=>logs.push(value);logJobFailure({id:randomUUID(),channel:'instagram',error:'account_mismatch'},malicious);}finally{console.error=original;}
+  assert.equal(logs.length,1);assert.equal(logs[0].includes(secret),false);assert.equal(JSON.parse(logs[0]).identityComparison,undefined);assert.equal(JSON.parse(logs[0]).phase,'instagram_identity');
+});
+test('protected Instagram mismatch response exposes only comparison booleans after login and CSRF, retaining the administrator session',async t=>{
+  const f=await fixture(t,{},async()=>({data:{id:'178414000000002',username:'spymedia_kr',user_id:userId,token:secret,raw:secret}})),{req,headers}=await apiFixture(t,f),route='/api/admin/instagram/check';
+  assert.equal((await req(route,{method:'POST',body:'{}'})).status,401);assert.equal((await req(route,{method:'POST',headers:{...headers,'X-CSRF-Token':''},body:'{}'})).status,403);assert.equal(f.calls.length,0);
+  const response=await req(route,{method:'POST',headers,body:'{}'});assert.equal(response.status,409);const text=await response.text();
+  for(const value of [secret,userId,'178414000000002'])assert.equal(text.includes(value),false);
+  assert.deepEqual(JSON.parse(text),{error:'account_mismatch',details:{phase:'instagram_identity',identityComparison:{usernameMatches:true,idMatches:false,userIdPresent:true,userIdMatchesConfigured:true,idMatchesUserId:false}}});
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].method,'GET');assert.equal((await(await req('/api/admin/status',{headers})).json()).authenticated,true);assert.equal((await(await req('/api/admin/status')).json()).identityComparison,undefined);
+});
 test('photo preparation saves one original, deduplicates across concurrency and restart, and invokes no provider or conversion',async t=>{
   const f=await fixture(t),saved=await f.service.photos.upload(stream());
   const created=await Promise.all(Array.from({length:4},()=>f.service.jobs.create(draft(saved.id))));assert.ok(created.every(j=>j[0].id===created[0][0].id));

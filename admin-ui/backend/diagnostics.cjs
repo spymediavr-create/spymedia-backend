@@ -25,6 +25,12 @@ function failureDetails(value={}) {
     result.providerType=source.providerType;result.providerTitle=X_PROBLEMS.get(source.providerType);
   }else if(TYPES.has(source.providerType))result.providerType=source.providerType;
   if(PHASES.has(value.phase||value.errorPhase))result.phase=value.phase||value.errorPhase;
+  const check=value.identityComparison;
+  if(result.phase==='instagram_identity'&&check&&typeof check==='object'&&!Array.isArray(check)&&typeof check.usernameMatches==='boolean'&&typeof check.idMatches==='boolean'){
+    result.identityComparison={usernameMatches:check.usernameMatches,idMatches:check.idMatches};
+    if(typeof check.userIdPresent==='boolean')result.identityComparison.userIdPresent=check.userIdPresent;
+    if(check.userIdPresent===true)for(const key of ['userIdMatchesConfigured','idMatchesUserId'])if(typeof check[key]==='boolean')result.identityComparison[key]=check[key];
+  }
   return Object.keys(result).length?result:null;
 }
 function xProvider(data) {
@@ -49,7 +55,8 @@ function providerFailure(response,method,host) {
 }
 function safeFailureCode(value){return SAFE_ERRORS.has(value)||['facebook_check_rate_limited','x_check_rate_limited','instagram_check_rate_limited','invalid_connection_check_input'].includes(value)?value:'request_failed';}
 function logJobFailure(job={},details) {
-  const entry={event:'sns_job_failed',channel:['x','instagram'].includes(job.channel)?job.channel:'facebook',error:SAFE_ERRORS.has(job.error)?job.error:'channel_request_failed',...failureDetails(details)};
+  const {identityComparison,...loggedDetails}=failureDetails(details)||{};
+  const entry={event:'sns_job_failed',channel:['x','instagram'].includes(job.channel)?job.channel:'facebook',error:SAFE_ERRORS.has(job.error)?job.error:'channel_request_failed',...loggedDetails};
   if(typeof job.id==='string'&&/^[a-f0-9-]{36}$/.test(job.id))entry.jobId=job.id;
   // Never log provider messages, request/response bodies, URLs, headers or credentials.
   console.error(JSON.stringify(entry));
