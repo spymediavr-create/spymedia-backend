@@ -29,6 +29,19 @@ class Connectors {
       youtube:!!(e.YOUTUBE_OAUTH_CLIENT_ID&&e.YOUTUBE_OAUTH_CLIENT_SECRET&&e.YOUTUBE_OAUTH_REFRESH_TOKEN&&e.YOUTUBE_PUBLISH_ENABLED==='true'),blog:true
     };
   }
+  describeInstagramConnection(){
+    return {credentialsConfigured:!!(/^v\d+\.\d+$/.test(this.env.META_GRAPH_VERSION||'')&&/^\d{1,30}$/.test(this.env.IG_USER_ID||'')&&this.env.IG_ACCESS_TOKEN),mediaDeliveryConfigured:!!(this.settings.origin&&this.settings.mediaKey),publishingEnabled:this.settings.publishingEnabled===true&&this.env.IG_PUBLISH_ENABLED==='true',publishingPermissionsVerified:false};
+  }
+  async instagramIdentity(){
+    try{
+      if(!this.describeInstagramConnection().credentialsConfigured)throw error(503,'instagram_not_configured');
+      const identity=(await this.request('GET','https://graph.instagram.com/'+this.env.META_GRAPH_VERSION+'/'+this.env.IG_USER_ID+'?fields=id,username',this.env.IG_ACCESS_TOKEN)).data;
+      if(typeof identity?.id!=='string'||!/^\d{1,30}$/.test(identity.id)||typeof identity.username!=='string')throw error(502,'invalid_channel_response');
+      if(identity.id!==this.env.IG_USER_ID||identity.username!==TARGETS.instagram)throw error(409,'account_mismatch');
+      return {userId:identity.id,username:TARGETS.instagram,identityVerified:true};
+    }catch(e){e.phase='instagram_identity';throw e;}
+  }
+  async checkInstagramConnection(){return {...await this.instagramIdentity(),...this.describeInstagramConnection()};}
   async facebookIdentity(){
     const root='https://graph.facebook.com/'+this.env.META_GRAPH_VERSION;
     try{
@@ -65,8 +78,21 @@ class Connectors {
   async instagram(job,ctx) {
     const root='https://graph.instagram.com/'+this.env.META_GRAPH_VERSION;const id=this.env.IG_USER_ID,token=this.env.IG_ACCESS_TOKEN;
     const call=async(method,route,body)=>this.request(method,root+'/'+route,token,body);
-    const identity=(await call('GET',id+'?fields=id,username')).data;
-    if(identity.id!==id||identity.username!==TARGETS.instagram)throw error(409,'account_mismatch');
+    await this.instagramIdentity();
+    if(job.type==='instagram-photo'){
+      if(job.assets.length!==1||job.assets[0].kind!=='image'||job.assets[0].type!=='image/jpeg'||job.assets[0].original!==true)throw error(422,'instagram_photo_only');
+      let container,mediaId;
+      try{container=identifier((await call('POST',id+'/media',{image_url:this.mediaUrl(job.assets[0]),caption:caption(job.input)})).data?.id);await ctx.checkpoint({containerId:container});}catch(e){e.phase='instagram_photo_create';throw e;}
+      try{await this.waitInstagram(call,container,{interval:2000});}catch(e){e.phase='instagram_photo_prepare';throw e;}
+      try{await ctx.beforePublication({containerId:container});mediaId=identifier((await call('POST',id+'/media_publish',{creation_id:container})).data?.id);await ctx.checkpoint({externalId:mediaId});}catch(e){e.phase='instagram_photo_publish';throw e;}
+      try{
+        const result=(await call('GET',mediaId+'?fields=id,permalink')).data;
+        if(result?.id!==mediaId)throw error(502,'verify_publication',true);
+        let url=null;
+        try{const u=new URL(result.permalink);if(u.protocol==='https:'&&['instagram.com','www.instagram.com'].includes(u.hostname)&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&/^\/(p|reel)\/[a-zA-Z0-9_-]+\/$/.test(u.pathname))url=u.href;}catch{}
+        return {externalId:mediaId,url};
+      }catch(e){e.phase='instagram_photo_verify';throw e;}
+    }
     const assets=job.assets,children=[];
     for(const asset of assets) {
       const body=asset.kind==='video'?{media_type:'REELS',video_url:this.mediaUrl(asset),share_to_feed:true}:{image_url:this.mediaUrl(asset)};
@@ -82,12 +108,12 @@ class Connectors {
     if(result.id!==mediaId)throw error(502,'verify_publication',true);
     return {externalId:mediaId,url:result.permalink||null};
   }
-  async waitInstagram(call,id) {
+  async waitInstagram(call,id,{interval=60000}={}) {
     for(let i=0;i<6;i++) {
       const state=(await call('GET',id+'?fields=status_code')).data.status_code;
       if(state==='FINISHED')return;
       if(['ERROR','EXPIRED','PUBLISHED'].includes(state))throw error(422,'channel_media_processing');
-      if(i<5)await this.sleep(60000);
+      if(i<5)await this.sleep(interval);
     }
     throw error(422,'channel_media_processing_timeout');
   }

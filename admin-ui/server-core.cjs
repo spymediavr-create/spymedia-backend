@@ -6,7 +6,7 @@ const scrypt = promisify(crypto.scrypt);
 const {Service} = require('./backend/service.cjs');
 const {failureDetails,safeFailureCode,logXConnectionFailure}=require('./backend/diagnostics.cjs');
 const root = path.join(__dirname, 'public');
-const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'record-ui.js', 'instagram-design.js'].map(file => ['/admin-assets/' + file, file]));
+const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'record-ui.js', 'instagram-design.js', 'instagram-publish.js', 'instagram-publish.css'].map(file => ['/admin-assets/' + file, file]));
 const SESSION_MS = 30 * 60 * 1000;
 const LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
@@ -92,6 +92,10 @@ function createAdminHandler(options = {}) {
           const body=await readJson(req);json(res,200,{video:await service.youtubeSource.fetch(body.url)});
         }else if(route.startsWith('/api/admin/media/')&&['GET','HEAD'].includes(req.method)){
           await service.sendMedia(req,res,url);
+        }else if(route==='/api/admin/instagram/check'&&req.method==='POST'){
+          const body=await readJson(req);
+          if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length||url.search){json(res,400,{error:'invalid_connection_check_input'});return true;}
+          json(res,200,{connection:await service.checkInstagramConnection()});
         }else if(route==='/api/admin/facebook/check'&&req.method==='POST'){
           const body=await readJson(req);
           if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length||url.search){json(res,400,{error:'invalid_connection_check_input'});return true;}
@@ -128,7 +132,7 @@ function createAdminHandler(options = {}) {
       } else json(res, 404, {error:'Not found'});
     } catch (error) {
       if(!res.headersSent){
-        const diagnostic=['/api/admin/facebook/check','/api/admin/x/check'].includes(route),details=failureDetails(error);
+        const diagnostic=['/api/admin/facebook/check','/api/admin/x/check','/api/admin/instagram/check'].includes(route),details=failureDetails(error);
         if(route==='/api/admin/x/check')try{logXConnectionFailure(error);}catch{}
         const status=Number.isInteger(error.status)&&error.status>=400&&error.status<=599?error.status:500;
         const retry=diagnostic&&Number.isInteger(error.retryAfter)&&error.retryAfter>0&&error.retryAfter<=60?{'Retry-After':String(error.retryAfter)}:{};

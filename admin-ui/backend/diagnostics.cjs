@@ -1,5 +1,5 @@
-const PHASES=new Set(['facebook_identity','facebook_link_create','facebook_link_verify','x_identity','x_link_create','x_link_verify','x_token_refresh']);
-const SAFE_ERRORS=new Set(['channel_auth_or_permission','channel_rate_limit','channel_request_failed','channel_network_failure','channel_not_configured','account_mismatch','verify_publication','invalid_channel_response','x_auth_configuration','x_auth_expired','x_unauthorized','x_forbidden','x_payment_required','x_scope_missing','x_cost_confirmation_required','x_token_storage_unavailable','x_refresh_reauthorization_required']);
+const PHASES=new Set(['facebook_identity','facebook_link_create','facebook_link_verify','x_identity','x_link_create','x_link_verify','x_token_refresh','instagram_identity','instagram_photo_create','instagram_photo_prepare','instagram_photo_publish','instagram_photo_verify']);
+const SAFE_ERRORS=new Set(['channel_auth_or_permission','channel_rate_limit','channel_request_failed','channel_network_failure','channel_not_configured','account_mismatch','verify_publication','invalid_channel_response','x_auth_configuration','x_auth_expired','x_unauthorized','x_forbidden','x_payment_required','x_scope_missing','x_cost_confirmation_required','x_token_storage_unavailable','x_refresh_reauthorization_required','instagram_not_configured','instagram_photo_only','instagram_photo_dimensions','instagram_content_limits','channel_media_processing','channel_media_processing_timeout']);
 const TYPES=new Set(['OAuthException','GraphMethodException','FacebookApiException','APIException','Exception','invalid_grant','invalid_client','unauthorized_client','invalid_scope','unsupported_grant_type','temporarily_unavailable']);
 // Exact problem URIs and titles become fixed identifiers. Never forward upstream prose or URLs.
 const X_PROBLEMS=new Map([
@@ -47,9 +47,9 @@ function providerFailure(response,method,host) {
   // Remote authentication failures are local 409s, so they cannot expire the administrator session.
   return {status:auth||x&&response.status===402?409:limited?429:502,code:errorCode,uncertain:method!=='GET'&&response.status>=500,providerDetails:details};
 }
-function safeFailureCode(value){return SAFE_ERRORS.has(value)||['facebook_check_rate_limited','x_check_rate_limited','invalid_connection_check_input'].includes(value)?value:'request_failed';}
+function safeFailureCode(value){return SAFE_ERRORS.has(value)||['facebook_check_rate_limited','x_check_rate_limited','instagram_check_rate_limited','invalid_connection_check_input'].includes(value)?value:'request_failed';}
 function logJobFailure(job={},details) {
-  const entry={event:'sns_job_failed',channel:job.channel==='x'?'x':'facebook',error:SAFE_ERRORS.has(job.error)?job.error:'channel_request_failed',...failureDetails(details)};
+  const entry={event:'sns_job_failed',channel:['x','instagram'].includes(job.channel)?job.channel:'facebook',error:SAFE_ERRORS.has(job.error)?job.error:'channel_request_failed',...failureDetails(details)};
   if(typeof job.id==='string'&&/^[a-f0-9-]{36}$/.test(job.id))entry.jobId=job.id;
   // Never log provider messages, request/response bodies, URLs, headers or credentials.
   console.error(JSON.stringify(entry));

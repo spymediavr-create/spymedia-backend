@@ -6,6 +6,7 @@ const {parseYouTubeUrl}=require('./links.cjs');
 const {failureDetails,logJobFailure,safeFailureCode}=require('./diagnostics.cjs');
 const CHANNELS = ['youtube','instagram','x','facebook','blog'];
 const now = () => new Date().toISOString();
+const nativePhoto = job => job.type==='instagram-photo'&&job.channel==='instagram';
 function input(body) {
   if(!body||typeof body.title!=='string'||typeof body.description!=='string'||!body.title.trim()||!body.description.trim()||body.title.length>200||body.description.length>5000||!Array.isArray(body.tags)||body.tags.length>30||body.tags.some(t=>typeof t!=='string'||!t||t.length>60||/[\s#<>\x00-\x1f]/.test(t)))throw error(400,'invalid_draft');
   if(!Array.isArray(body.channels)||!body.channels.length||body.channels.length>5||body.channels.some(c=>!CHANNELS.includes(c))||new Set(body.channels).size!==body.channels.length)throw error(400,'invalid_channel');
@@ -18,10 +19,29 @@ class Jobs {
   constructor(settings,store,media,connectors,options={}) {this.failureLogger=options.failureLogger||logJobFailure;this.settings=settings;this.store=store;this.media=media;this.connectors=connectors;this.tail=Promise.resolve();}
   enqueue(fn) {this.tail=this.tail.then(fn).catch(()=>{});}
   async create(body) {
+    if(body?.type==='instagram-photo')return this.createInstagramPhoto(body);
     if(body?.type==='link')return this.createLink(body);
     input(body);
     if(!this.settings.legacyPreparationEnabled)throw error(409,'legacy_operation_disabled');
     return this.createLegacy(body);
+  }
+  async createInstagramPhoto(body){
+    if(!Array.isArray(body.channels)||body.channels.length!==1||body.channels[0]!=='instagram')throw error(400,'invalid_channel');
+    if(!Array.isArray(body.mediaIds)||body.mediaIds.length!==1||typeof body.mediaIds[0]!=='string'||body.youtubeUrl)throw error(400,'instagram_photo_only');
+    const checked=input(body),content={title:checked.title,description:checked.description,tags:checked.tags};
+    if(caption(content).length>2200)throw error(400,'instagram_content_limits');
+    const photo=await this.store.media(body.mediaIds[0]);
+    if(photo.kind!=='image'||photo.type!=='image/jpeg'||photo.profile!=='link-photo'||!Number.isSafeInteger(photo.size)||photo.size<=0||photo.size>8*1024**2)throw error(422,'instagram_photo_only');
+    if(!Number.isInteger(photo.width)||!Number.isInteger(photo.height)||photo.width<320||photo.width>1440||photo.height<1||photo.width*5<photo.height*4||photo.width*100>photo.height*191)throw error(422,'instagram_photo_dimensions');
+    if(photo.trashedAt)throw error(409,'media_in_trash');
+    const job=await this.store.transaction(state=>{
+      if(state.media[photo.id]?.trashedAt)throw error(409,'media_in_trash');
+      const key=crypto.createHash('sha256').update(JSON.stringify({version:3,type:'instagram-photo',account:'spymedia_kr',input:content,media:photo.sha256})).digest('hex');
+      const existing=Object.values(state.jobs).find(j=>j.key===key);if(existing?.trashedAt)throw error(409,'job_in_trash');if(existing)return existing;
+      const item={id:crypto.randomUUID(),type:'instagram-photo',key,channel:'instagram',input:content,mediaIds:[photo.id],status:'prepared',assets:[{id:photo.id,kind:'image',type:photo.type,size:photo.size,width:photo.width,height:photo.height,original:true}],createdAt:now(),updatedAt:now(),publicationAttempted:false};
+      state.jobs[item.id]=item;return item;
+    });
+    return [this.view(job)];
   }
   async createLink(body) {
     if(!Array.isArray(body.channels)||!body.channels.length||body.channels.some(channel=>!['facebook','x','blog'].includes(channel)))throw error(400,'invalid_link_channel');
@@ -94,7 +114,7 @@ class Jobs {
     if(!this.settings.publishingEnabled)throw error(503,'publishing_disabled');
     if(!Array.isArray(ids)||!ids.length||ids.length>4||new Set(ids).size!==ids.length)throw error(400,'invalid_job_selection');
     await this.store.transaction(state=>{
-      if(ids.some(id=>state.jobs[id]&&state.jobs[id].type!=='link'&&!this.settings.legacyPreparationEnabled))throw error(409,'legacy_operation_disabled');
+      if(ids.some(id=>state.jobs[id]&&state.jobs[id].type!=='link'&&!nativePhoto(state.jobs[id])&&!this.settings.legacyPreparationEnabled))throw error(409,'legacy_operation_disabled');
       for(const id of ids){const job=state.jobs[id];if(!job||job.channel==='blog'||job.status!=='prepared'||job.publicationAttempted)throw error(409,'job_not_ready');if(job.trashedAt)throw error(409,'job_in_trash');if(job.mediaIds.some(mediaId=>state.media[mediaId]?.trashedAt))throw error(409,'media_in_trash');if(!this.connectors.availability()[job.channel])throw error(503,'channel_not_configured');}
       for(const id of ids)Object.assign(state.jobs[id],{status:'queued',approvedAt:now(),updatedAt:now()});
     });
@@ -105,22 +125,22 @@ class Jobs {
     await this.store.transaction(state=>{Object.assign(state.jobs[id],{status:'publishing',updatedAt:now()});});
     const checkpoint=async values=>this.store.transaction(state=>{Object.assign(state.jobs[id],values,{updatedAt:now()});});
     try {
-      const result=await this.connectors.publish(job,{assetPath:asset=>this.store.file(asset.id,true),checkpoint,beforePublication:values=>checkpoint({...values,publicationAttempted:true})});
+      const result=await this.connectors.publish(job,{assetPath:asset=>this.store.file(asset.id,!asset.original),checkpoint,beforePublication:values=>checkpoint({...values,publicationAttempted:true})});
       await checkpoint({status:'succeeded',result});
-     }catch(e){const details=failureDetails(e);await checkpoint({status:job.publicationAttempted||e.uncertain?'unknown':'failed',error:job.channel==='x'?safeFailureCode(e.code):e.code||'channel_request_failed',errorDetails:details});if(['facebook','x'].includes(job.channel))try{this.failureLogger(job,details);}catch{} }
+     }catch(e){const details=failureDetails(e);await checkpoint({status:job.publicationAttempted||e.uncertain?'unknown':'failed',error:['x','instagram'].includes(job.channel)?safeFailureCode(e.code):e.code||'channel_request_failed',errorDetails:details});if(['facebook','x','instagram'].includes(job.channel))try{this.failureLogger(job,details);}catch{} }
   }
   async retry(id) {
     await this.store.transaction(state=>{
       const job=state.jobs[id];if(!job||job.status!=='failed'||job.publicationAttempted)throw error(409,'check_channel_before_retry');
-      if(job.type!=='link'&&!this.settings.legacyPreparationEnabled)throw error(409,'legacy_operation_disabled');
+      if(job.type!=='link'&&!nativePhoto(job)&&!this.settings.legacyPreparationEnabled)throw error(409,'legacy_operation_disabled');
       if(job.trashedAt)throw error(409,'job_in_trash');if(job.mediaIds.some(mediaId=>state.media[mediaId]?.trashedAt))throw error(409,'media_in_trash');
-      Object.assign(job,{status:job.type==='link'||job.assets.length===job.mediaIds.length?'prepared':'converting',preparationStarted:false,error:null,errorDetails:null,updatedAt:now()});
+      Object.assign(job,{status:job.type==='link'||nativePhoto(job)||job.assets.length===job.mediaIds.length?'prepared':'converting',preparationStarted:false,error:null,errorDetails:null,updatedAt:now()});
     });
     if((await this.store.job(id)).status==='converting')this.enqueue(()=>this.prepare(id));
     return this.list();
   }
   view(job) {
-    const legacyReadOnly=job.type!=='link'&&!this.settings.legacyPreparationEnabled;
+    const legacyReadOnly=job.type!=='link'&&!nativePhoto(job)&&!this.settings.legacyPreparationEnabled;
     const mediaInTrash=job.mediaIds.some(id=>this.store.state.media[id]?.trashedAt);
     const sourceMedia=job.mediaIds.map(id=>{
       const media=this.store.state.media[id];

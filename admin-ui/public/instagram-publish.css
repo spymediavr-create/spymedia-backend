@@ -1,0 +1,7 @@
+.ig-native{border-top:1px solid var(--line);margin-top:22px;padding-top:18px}
+.ig-native h3{font-size:15px;margin:0 0 12px}.ig-native>label{display:block;font-size:12px;font-weight:600;margin:16px 0 8px}
+.ig-native input[type=file]{max-width:100%;font-size:12px}.ig-native>img{display:block;max-width:100%;max-height:300px;object-fit:contain;margin:16px auto;border-radius:7px}.ig-native>img[hidden]{display:none}
+.ig-native-jobs{padding:24px;margin-top:24px}.ig-native-jobs .section-heading{flex-wrap:wrap;gap:12px}.ig-native-jobs .record-item{margin:10px 0}
+.ig-native-jobs>.primary-button{width:auto;min-height:40px;margin:14px 0 0;padding:10px 18px}.ig-native-jobs .record-select{cursor:pointer}
+.ig-placeholder.ig-native-preview{padding:0;min-height:0;background:#eff4f8}.ig-placeholder.ig-native-preview>span,.ig-placeholder.ig-native-preview>strong,.ig-placeholder.ig-native-preview>p{display:none}.ig-placeholder>img{max-width:100%;max-height:400px;object-fit:contain}.ig-placeholder>img[hidden]{display:none}
+@media(max-width:760px){.ig-native-jobs{padding:18px 16px}.ig-native-jobs>.primary-button{width:100%}.ig-native .facebook-check-row{align-items:flex-start;flex-direction:column}}

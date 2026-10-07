@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="ko">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>인스타그램 준비 도우미 · SpyMedia</title><link rel="stylesheet" href="/admin-assets/styles.css"><script src="/admin-assets/instagram-design.js" type="module"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>인스타그램 준비 도우미 · SpyMedia</title><link rel="stylesheet" href="/admin-assets/styles.css"><link rel="stylesheet" href="/admin-assets/instagram-publish.css"><script src="/admin-assets/instagram-design.js" type="module"></script><script src="/admin-assets/instagram-publish.js" type="module"></script></head>
 <body>
 <header class="site-header"><a class="brand" href="/admin"><span class="brand-mark">S</span><strong>SpyMedia</strong><span class="brand-divider"></span><span>Instagram Studio</span></a><a id="ig-back" class="ig-back" href="/admin">링크 소개 화면으로</a></header>
 <main class="workspace ig-workspace">
-<div class="page-heading"><div><span class="eyebrow">INSTAGRAM · SEPARATE WORKSPACE</span><h1>인스타그램은 따로 준비하세요</h1><p>설명과 해시태그를 정리하고, Meta Business Suite에서 파일을 선택해 게시합니다.</p></div><span class="step-badge">준비 도우미 시안</span></div>
-<div class="mode-banner"><span class="info-icon">i</span><p>이 화면은 문구 준비용입니다. 연결된 계정과 파일·최종 문구는 Meta Business Suite에서 직접 확인하세요.</p></div>
+<div class="page-heading"><div><span class="eyebrow">INSTAGRAM · SEPARATE WORKSPACE</span><h1>인스타그램 사진과 문구 준비</h1><p>사진 1장은 이 화면에서 준비하고 전송할 수 있습니다. 영상은 기존 Meta Business Suite 도우미를 이용하세요.</p></div><span class="step-badge">spymedia_kr</span></div>
+<div class="mode-banner"><span class="info-icon">i</span><p id="ig-mode-note">사진과 문구를 저장한 뒤 최종 확인을 거쳐 전송합니다. 계정 확인과 사진 준비만으로 게시되지는 않습니다.</p></div>
 <div class="ig-layout">
 <section class="panel ig-editor" aria-labelledby="ig-editor-title"><div class="section-heading"><h2 id="ig-editor-title">게시 문구 준비</h2><span class="quiet-label">spymedia_kr</span></div>
 <fieldset class="ig-types"><legend>콘텐츠 유형</legend><label><input type="radio" name="ig-kind" value="reel" checked>릴스 · 영상</label><label><input type="radio" name="ig-kind" value="photo">사진 · 게시물</label></fieldset>
@@ -14,9 +14,20 @@
 <div class="section-heading ig-tags-heading"><label for="ig-tags">해시태그</label><button id="ig-recommend" type="button" class="outline-button">해시태그 추천</button></div><textarea id="ig-tags" rows="2" maxlength="1800" placeholder="#SpyMedia #드론촬영"></textarea><p class="field-hint">제목·설명 기반 추천을 추가하거나 자유롭게 수정하세요.</p>
 <p id="ig-length" class="ig-length" role="status"></p>
 <div class="ig-actions"><button id="ig-copy" type="button" class="outline-button">설명·해시태그 복사</button><a id="ig-open" href="https://business.facebook.com/" target="_blank" rel="noopener noreferrer" class="primary-button">Meta Business Suite 열기 ↗</a></div><p id="ig-feedback" class="field-error" role="status" aria-live="polite"></p>
+<section class="ig-native" aria-labelledby="ig-native-heading">
+<h3 id="ig-native-heading">관리자에서 사진 전송</h3>
+<div class="facebook-check-row"><button id="ig-check" type="button" class="outline-button" disabled aria-describedby="ig-connection">계정 확인</button><span id="ig-connection" role="status" aria-live="polite">연결 설정을 확인하고 있습니다.</span></div>
+<label for="ig-photo">사진 1장 선택</label><input id="ig-photo" type="file" accept="image/jpeg,.jpg,.jpeg" disabled>
+<p class="field-hint">JPEG · 최대 8MB · 가로 320–1,440px · 비율 4:5–1.91:1. 사진은 원본 그대로 사용합니다.</p>
+<img id="ig-photo-preview" hidden alt="선택한 사진 미리보기"><p id="ig-photo-info" class="field-hint" role="status"></p>
+<button id="ig-prepare" type="button" class="outline-button" disabled>사진·문구 준비</button>
+<p id="ig-publish-feedback" class="field-error" role="status" aria-live="polite"></p>
+</section>
 </section>
 <section class="panel ig-preview-panel" aria-labelledby="ig-preview-heading"><div class="section-heading"><h2 id="ig-preview-heading">문구 미리보기</h2><span class="preview-chip">Instagram</span></div><article class="ig-preview"><div class="social-heading"><span>◎</span><div><strong>spymedia_kr</strong><span>스파이미디어</span></div></div><div id="ig-placeholder" class="ig-placeholder"><span>◎</span><strong>릴스 · 영상</strong><p>영상은 Meta Business Suite에서 선택하세요</p></div><div class="social-copy"><p id="ig-caption" class="ig-caption"></p></div></article>
-<div class="ig-guide"><span class="eyebrow">READY TO SHARE</span><h3>마지막 확인은 Business Suite에서</h3><ol><li>설명·해시태그를 복사합니다.</li><li>Meta Business Suite에서 Instagram 계정과 게시물 유형을 선택합니다.</li><li>직접 촬영한 영상·사진을 선택하고 문구를 붙여 넣습니다.</li><li>미리보기를 확인한 뒤 최종 게시합니다.</li></ol><p>파일과 문구는 자동으로 전달되지 않습니다. 이 도우미에서 SNS 전송은 실행되지 않습니다.</p></div>
+<div class="ig-guide"><span class="eyebrow">READY TO SHARE</span><h3>영상·별도 게시용 Business Suite 도우미</h3><ol><li>설명·해시태그를 복사합니다.</li><li>Meta Business Suite에서 Instagram 계정과 게시물 유형을 선택합니다.</li><li>직접 촬영한 영상·사진을 선택하고 문구를 붙여 넣습니다.</li><li>미리보기를 확인한 뒤 최종 게시합니다.</li></ol><p>Business Suite에는 파일과 문구를 직접 넣어 주세요. 사진 1장의 관리자 전송은 왼쪽 사진 준비 기능과 아래 전송 목록을 이용합니다.</p></div>
 </section>
-</div><footer class="workspace-footer"><span>SpyMedia · Instagram 준비 공간</span><span>Facebook·X 링크 소개와 별도로 진행합니다.</span></footer>
+</div>
+<section class="panel ig-native-jobs" aria-labelledby="ig-jobs-heading"><div class="section-heading"><h2 id="ig-jobs-heading">준비한 Instagram 사진</h2><button id="ig-refresh" type="button" class="outline-button" disabled>목록 새로고침</button></div><p class="field-hint">저장된 사진과 문구를 확인한 뒤 전송할 항목 1개를 선택하세요.</p><div id="ig-jobs"></div><button id="ig-send" type="button" class="primary-button" disabled>선택한 사진 전송</button><p id="ig-send-note" class="field-hint" role="status"></p></section>
+<footer class="workspace-footer"><span>SpyMedia · Instagram 준비 공간</span><span>Facebook·X 링크 소개와 별도로 진행합니다.</span></footer>
 </main></body></html>
