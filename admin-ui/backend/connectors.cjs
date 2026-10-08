@@ -36,13 +36,13 @@ class Connectors {
     try{
       if(!this.describeInstagramConnection().credentialsConfigured)throw error(503,'instagram_not_configured');
       const identity=(await this.request('GET','https://graph.instagram.com/'+this.env.META_GRAPH_VERSION+'/'+this.env.IG_USER_ID+'?fields=id,user_id,username',this.env.IG_ACCESS_TOKEN)).data;
-      if(typeof identity?.id!=='string'||!/^\d{1,30}$/.test(identity.id)||typeof identity.username!=='string')throw error(502,'invalid_channel_response');
-      if(identity.id!==this.env.IG_USER_ID||identity.username!==TARGETS.instagram){
+      if(typeof identity?.id!=='string'||!/^\d{1,30}$/.test(identity.id)||typeof identity.user_id!=='string'||!/^\d{1,30}$/.test(identity.user_id)||typeof identity.username!=='string')throw error(502,'invalid_channel_response');
+      if(identity.user_id!==this.env.IG_USER_ID||identity.username!==TARGETS.instagram){
         const userIdPresent=Object.hasOwn(identity,'user_id'),userIdUsable=typeof identity.user_id==='string'&&/^\d{1,30}$/.test(identity.user_id);
         // Compare only; never forward the identity, identifier values or provider payload.
-        throw Object.assign(error(409,'account_mismatch'),{identityComparison:{usernameMatches:identity.username===TARGETS.instagram,idMatches:identity.id===this.env.IG_USER_ID,userIdPresent,...(userIdUsable?{userIdMatchesConfigured:identity.user_id===this.env.IG_USER_ID,idMatchesUserId:identity.id===identity.user_id}:{})}});
+        throw Object.assign(error(409,'account_mismatch'),{identityComparison:{usernameMatches:identity.username===TARGETS.instagram,idMatches:identity.user_id===this.env.IG_USER_ID,userIdPresent,...(userIdUsable?{userIdMatchesConfigured:identity.user_id===this.env.IG_USER_ID,idMatchesUserId:identity.id===identity.user_id}:{})}});
       }
-      return {userId:identity.id,username:TARGETS.instagram,identityVerified:true};
+      return {userId:identity.user_id,username:TARGETS.instagram,identityVerified:true};
     }catch(e){e.phase='instagram_identity';throw e;}
   }
   async checkInstagramConnection(){return {...await this.instagramIdentity(),...this.describeInstagramConnection()};}
@@ -80,9 +80,9 @@ class Connectors {
     return this[job.channel](job,context);
   }
   async instagram(job,ctx) {
-    const root='https://graph.instagram.com/'+this.env.META_GRAPH_VERSION;const id=this.env.IG_USER_ID,token=this.env.IG_ACCESS_TOKEN;
+    const root='https://graph.instagram.com/'+this.env.META_GRAPH_VERSION;const token=this.env.IG_ACCESS_TOKEN;
+    const {userId:id}=await this.instagramIdentity();
     const call=async(method,route,body)=>this.request(method,root+'/'+route,token,body);
-    await this.instagramIdentity();
     if(job.type==='instagram-photo'){
       if(job.assets.length!==1||job.assets[0].kind!=='image'||job.assets[0].type!=='image/jpeg'||job.assets[0].original!==true)throw error(422,'instagram_photo_only');
       let container,mediaId;

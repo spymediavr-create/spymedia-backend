@@ -15,7 +15,7 @@ Meta 공식 참고: [Content Publishing](https://developers.facebook.com/documen
 
 서버는 기존 `META_GRAPH_VERSION`, `IG_USER_ID`, `IG_ACCESS_TOKEN`을 사용한다. 사진 전달에는 기존 `PUBLIC_ORIGIN`, `MEDIA_SIGNING_KEY`, 영구 사진 저장 공간 설정이 필요하다. 전송에는 `SNS_PUBLISH_ENABLED=true`와 `IG_PUBLISH_ENABLED=true`도 필요하다. 이 수정안은 운영 환경변수를 변경하지 않는다. Facebook과 X의 현재 활성화 설정도 유지한다.
 
-로그인한 관리자에게 인증·사진 전달·전송 설정의 존재 여부만 보여 준다. 인증정보 값은 클라이언트에 전달하지 않는다. 계정 확인 성공은 `spymedia_kr`라는 계정을 기존 토큰으로 조회했다는 뜻이다. `publishingPermissionsVerified`는 항상 false이며 게시 권한·앱 심사·운영 토큰 갱신 완료를 의미하지 않는다.
+로그인한 관리자에게 인증·사진 전달·전송 설정의 존재 여부만 보여 준다. 인증정보 값은 클라이언트에 전달하지 않는다. 계정 확인은 `fields=id,user_id,username`을 요청하고, 두 ID가 숫자 문자열인지 검증한 뒤 프로페셔널 계정 ID인 `user_id`가 기존 `IG_USER_ID`와 일치하고 계정명이 `spymedia_kr`인지 확인한다. 앱 범위 `id`로 대신 통과시키지 않는다. 성공 반환값과 미디어 등록·게시 대상은 검증된 `user_id`로 통일한다. 계정 확인 성공은 기존 토큰으로 이 계정을 조회했다는 뜻이다. `publishingPermissionsVerified`는 항상 false이며 게시 권한·앱 심사·운영 토큰 갱신 완료를 의미하지 않는다.
 
 Instagram Login 앱 ID는 **1030189823411067**이다. 사용자가 확인한 기존 권한은 `instagram_business_basic`, `instagram_business_content_publish`이다. Business Suite의 게시 대상 확인은 이 앱의 API 인증을 검증하지 않는다.
 
