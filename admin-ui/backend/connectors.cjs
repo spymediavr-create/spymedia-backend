@@ -35,7 +35,7 @@ class Connectors {
   async instagramIdentity(){
     try{
       if(!this.describeInstagramConnection().credentialsConfigured)throw error(503,'instagram_not_configured');
-      const identity=(await this.request('GET','https://graph.instagram.com/'+this.env.META_GRAPH_VERSION+'/'+this.env.IG_USER_ID+'?fields=id,username',this.env.IG_ACCESS_TOKEN)).data;
+      const identity=(await this.request('GET','https://graph.instagram.com/'+this.env.META_GRAPH_VERSION+'/'+this.env.IG_USER_ID+'?fields=id,user_id,username',this.env.IG_ACCESS_TOKEN)).data;
       if(typeof identity?.id!=='string'||!/^\d{1,30}$/.test(identity.id)||typeof identity.username!=='string')throw error(502,'invalid_channel_response');
       if(identity.id!==this.env.IG_USER_ID||identity.username!==TARGETS.instagram){
         const userIdPresent=Object.hasOwn(identity,'user_id'),userIdUsable=typeof identity.user_id==='string'&&/^\d{1,30}$/.test(identity.user_id);

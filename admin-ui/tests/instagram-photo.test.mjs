@@ -24,7 +24,7 @@ async function fixture(t,env={},transport){
   const connector=new Connectors(settings,{mediaUrl:asset=>service.signedUrl(asset),sleep:async ms=>pauses.push(ms),request:async(method,url,token,body)=>{
     calls.push({method,url,body});assert.equal(token,settings.env.IG_ACCESS_TOKEN);
     if(transport)return transport(method,url,body);
-    if(url.includes('?fields=id,username'))return {data:{id:userId,username:'spymedia_kr',token:secret}};
+    if(url.includes('?fields=id,user_id,username'))return {data:{id:userId,username:'spymedia_kr',token:secret}};
     if(url.endsWith('/media'))return {data:{id:'container_1'}};
     if(url.includes('?fields=status_code'))return {data:{status_code:'FINISHED'}};
     if(url.endsWith('/media_publish'))return {data:{id:'media_1'}};
@@ -91,7 +91,7 @@ test('protected Instagram mismatch response exposes only comparison booleans aft
   const response=await req(route,{method:'POST',headers,body:'{}'});assert.equal(response.status,409);const text=await response.text();
   for(const value of [secret,userId,'178414000000002'])assert.equal(text.includes(value),false);
   assert.deepEqual(JSON.parse(text),{error:'account_mismatch',details:{phase:'instagram_identity',identityComparison:{usernameMatches:true,idMatches:false,userIdPresent:true,userIdMatchesConfigured:true,idMatchesUserId:false}}});
-  assert.equal(f.calls.length,1);assert.equal(f.calls[0].method,'GET');assert.equal((await(await req('/api/admin/status',{headers})).json()).authenticated,true);assert.equal((await(await req('/api/admin/status')).json()).identityComparison,undefined);
+  assert.equal(f.calls.length,1);assert.equal(f.calls[0].method,'GET');assert.equal(f.calls[0].url,'https://graph.instagram.com/'+f.settings.env.META_GRAPH_VERSION+'/'+userId+'?fields=id,user_id,username');assert.equal((await(await req('/api/admin/status',{headers})).json()).authenticated,true);assert.equal((await(await req('/api/admin/status')).json()).identityComparison,undefined);
 });
 test('photo preparation saves one original, deduplicates across concurrency and restart, and invokes no provider or conversion',async t=>{
   const f=await fixture(t),saved=await f.service.photos.upload(stream());
@@ -112,7 +112,7 @@ test('native Instagram preparation rejects extra channels, media, URLs, captions
 test('native photo publish checks identity, waits before one publication, verifies the result and never sends video fields',async t=>{
   let polls=0;
   const f=await fixture(t,{},async(method,url)=>{
-    if(url.includes('fields=id,username'))return {data:{id:userId,username:'spymedia_kr'}};
+    if(url.includes('fields=id,user_id,username'))return {data:{id:userId,username:'spymedia_kr'}};
     if(url.endsWith('/media'))return {data:{id:'container_1'}};
     if(url.includes('fields=status_code'))return {data:{status_code:++polls===1?'IN_PROGRESS':'FINISHED'}};
     if(url.endsWith('/media_publish')){assert.equal(Object.values(f.store.state.jobs)[0].publicationAttempted,true);return {data:{id:'media_1'}};}
@@ -129,7 +129,7 @@ test('permission failures before publication allow explicit preparation; uncerta
   for(const phase of ['instagram_identity','instagram_photo_create','instagram_photo_publish','instagram_photo_verify']){
     const f=await fixture(t),saved=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(saved.id));
     const original=f.connector.request;f.connector.request=async(method,url,token,body)=>{
-      const matched=phase==='instagram_identity'?url.includes('fields=id,username'):phase==='instagram_photo_create'?url.endsWith('/media'):phase==='instagram_photo_publish'?url.endsWith('/media_publish'):url.includes('fields=id,permalink');
+      const matched=phase==='instagram_identity'?url.includes('fields=id,user_id,username'):phase==='instagram_photo_create'?url.endsWith('/media'):phase==='instagram_photo_publish'?url.endsWith('/media_publish'):url.includes('fields=id,permalink');
       if(matched)throw Object.assign(Error(secret),{status:409,code:'channel_auth_or_permission',providerDetails:{httpStatus:403,providerCode:200,message:secret,token:secret}});return original(method,url,token,body);
     };
     await f.service.jobs.start([job.id]);await f.service.jobs.tail;

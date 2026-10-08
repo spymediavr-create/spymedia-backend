@@ -88,7 +88,7 @@ const imageJob={channel:'instagram',input:{title:'fixture',description:'descript
 test('Instagram verifies the exact account and container readiness before publishing, then verifies the returned ID',async()=>{
   const calls=[];const c=adapter({META_GRAPH_VERSION:'v26.0',IG_USER_ID:'123',IG_ACCESS_TOKEN:processOnlySecret,IG_PUBLISH_ENABLED:'true'},async(method,url,token,body)=>{
     calls.push({method,url,body});assert.equal(token,processOnlySecret);
-    if(url.includes('fields=id,username'))return {data:{id:'123',username:TARGETS.instagram}};
+    if(url.includes('fields=id,user_id,username'))return {data:{id:'123',username:TARGETS.instagram}};
     if(url.endsWith('/media'))return {data:{id:'456'}};
     if(url.includes('status_code'))return {data:{status_code:'FINISHED'}};
     if(url.endsWith('/media_publish'))return {data:{id:'789'}};

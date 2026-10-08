@@ -18,8 +18,8 @@ const calls=[],checks=[],errors=[],external=[],dialogs=[],random=()=>randomBytes
 let identityOverride=null,uncertain=false,diagnosticNow=1000;
 const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'true',META_GRAPH_VERSION:'v25.0',IG_USER_ID:'178414000000001',IG_ACCESS_TOKEN:random(),IG_PUBLISH_ENABLED:'true',PUBLIC_ORIGIN:'http://127.0.0.1',MEDIA_SIGNING_KEY:randomBytes(32).toString('hex')});
 const store=new Store(settings),connectors=new Connectors(settings,{mediaUrl:asset=>service.signedUrl(asset),sleep:async()=>{},request:async(method,url,token,body)=>{
-  calls.push({method,phase:url.includes('fields=id,username')?'identity':url.endsWith('/media_publish')?'publish':url.endsWith('/media')?'container':url.includes('fields=status_code')?'processing':'verify'});
-  if(url.includes('fields=id,username'))return {data:identityOverride||{id:settings.env.IG_USER_ID,username:'spymedia_kr',unsafe:'<script>window.unsafe=true</script>'}};
+  calls.push({method,phase:url.includes('fields=id,user_id,username')?'identity':url.endsWith('/media_publish')?'publish':url.endsWith('/media')?'container':url.includes('fields=status_code')?'processing':'verify'});
+  if(url.includes('fields=id,user_id,username'))return {data:identityOverride||{id:settings.env.IG_USER_ID,username:'spymedia_kr',unsafe:'<script>window.unsafe=true</script>'}};
   if(url.endsWith('/media')){assert.equal(body.video_url,undefined);assert.equal(body.media_type,undefined);assert.match(body.image_url,new RegExp('^'+settings.origin));return {data:{id:'container_1'}};}
   if(url.includes('fields=status_code'))return {data:{status_code:'FINISHED'}};
   if(url.endsWith('/media_publish')){if(uncertain)throw Object.assign(Error('synthetic-private-provider-message'),{status:502,code:'channel_network_failure',uncertain:true});return {data:{id:'media_1'}};}
