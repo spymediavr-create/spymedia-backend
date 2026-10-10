@@ -1,4 +1,6 @@
-# 현재 링크 소개 운영 안내
+# 링크 소개와 원본 릴스 운영 안내
+
+메인 관리자에 원본 릴스 파일 선택·미리보기·검사·전송·결과 확인이 추가되었다. Instagram 릴스는 [원본 릴스·사진 운영 안내](INSTAGRAM-OPERATIONS.md)를 따르며, 아래 Facebook·X의 YouTube 링크 방식과 블로그 소개 사진 기능은 유지한다. 릴스 검사에는 FFprobe만 사용하고 서버 재인코딩은 하지 않는다.
 
 기존 대상은 [Render 서비스](https://dashboard.render.com/web/srv-d81bo0rtqb8s738pcv6g), `spymediavr-create/spymedia-backend`의 main, https://spymedia-backend.onrender.com 입니다. 기존 디스크 `/spymedia` 10GB, 데이터 `/spymedia/sns`, 단일 인스턴스와 홈페이지 API·자동 실행 설정을 보존합니다. 요금제·디스크·환경변수 값을 임의 변경하지 않습니다.
 
@@ -10,13 +12,13 @@ main push는 자동 배포를 시작합니다. 승인 전에는 push·배포·�
 2. 관리자에서 주소로 공개 제목·설명·썸네일을 조회하고 적용·수정합니다.
 3. Facebook·X 링크 소개와 블로그 원고를 준비합니다. 준비는 게시를 실행하지 않습니다.
 4. 사용자가 정확한 문구·주소·채널을 확인한 뒤 선택한 Facebook·X 작업을 전송합니다.
-5. 블로그와 Instagram은 각 준비 자료를 이용해 사용자 최종 게시를 진행합니다.
+5. 블로그는 준비 자료를 이용해 사용자가 최종 게시합니다. Instagram은 메인 릴스 영역 또는 별도 사진 도우미에서 저장된 파일과 문구를 확인한 뒤 전송합니다.
 
 YouTube 조회에는 기존 `YOUTUBE_API_KEY`만 재사용합니다. 키 값은 모델·채팅·로그로 전달하지 않습니다. 새로운 YouTube 업로드 OAuth 권한·갱신 토큰은 이 흐름에서 생성하지 않습니다. 조회 준비 여부만 인증된 상태 API에 노출합니다.
 
 공식 조회 API는 15초·응답 128KiB·리다이렉트 0회로 제한합니다. 썸네일은 동일 영상 ID의 `https://i.ytimg.com/vi/<ID>/<이름>.jpg`만 허용하며 15초·2MiB·리다이렉트 0회로 가져옵니다. 썸네일 실패 시 문구만 제공하고 기존 작성 내용은 보존합니다. 휴지통에 있는 같은 썸네일을 자동 복원하지 않습니다.
 
-사진은 JPG/PNG/WebP, 8MiB, 가로·세로 4096px 이내·총 1,600만 화소 이하로 받습니다. 스트리밍 저장·파일 헤더/치수 검증·내용 해시 중복 제거를 수행합니다. 전체 픽셀 디코딩과 리사이즈·EXIF 제거는 하지 않으며 블로그 다운로드는 원본입니다. 영상 업로드와 전체 영상 다운로드·변환은 새 흐름에 없습니다.
+사진은 JPG/PNG/WebP, 8MiB, 가로·세로 4096px 이내·총 1,600만 화소 이하로 받습니다. 스트리밍 저장·파일 헤더/치수 검증·내용 해시 중복 제거를 수행합니다. 전체 픽셀 디코딩과 리사이즈·EXIF 제거는 하지 않으며 블로그 다운로드는 원본입니다. 링크 소개는 영상 업로드·변환을 사용하지 않습니다. 릴스는 별도 업로드 경로에서 규격을 통과한 원본을 보관합니다.
 
 ## 관리자와 영구 저장소
 
@@ -34,7 +36,7 @@ YouTube 조회에는 기존 `YOUTUBE_API_KEY`만 재사용합니다. 키 값은 
 | Facebook | 스파이미디어 Page `1387247911137772`, feed 링크 소개 | `FB_PAGE_ACCESS_TOKEN`, `FB_PUBLISH_ENABLED=true`, 앱에서 확인한 `META_GRAPH_VERSION`; 매 전송 전 Page ID 확인 |
 | X | `spymedia_kor`, text 소개 + YouTube 주소 | 기존 OAuth 1.0a 네 개 키 또는 OAuth 2.0 사용자 인증; `X_PUBLISH_ENABLED=true`, 비용 확인값 `X_COST_LIMIT_ACKNOWLEDGED=true`는 실제 상한이 아님; [X 설정 안내](X-OPERATIONS.md) |
 | 블로그 | `blog.naver.com/spymedia`, 원고·사진 준비 | 사용자 최종 게시; 브라우저 매크로와 API 글쓰기 없음 |
-| Instagram | `spymedia_kr`, 별도 문구 준비 도우미 | Meta Business Suite에서 계정/파일/유형 선택·문구 붙여 넣기·최종 게시; 이 도우미의 API 발행 없음 |
+| Instagram | `spymedia_kr`, 메인 원본 릴스 + 별도 JPEG 사진 도우미 | 기존 Instagram Login·서명 HTTPS 전달·영구 저장소 재사용; 선택·최종 확인 후 API 발행, [Instagram 안내](INSTAGRAM-OPERATIONS.md) |
 
 Facebook 권한은 기존 `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`와 Page 콘텐츠 접근을 확인합니다. 개인 프로필 `100069643772419`는 대상이 아닙니다. 필요성이 확인되지 않은 `business_management` 권한을 추가하지 않습니다. 링크 소개에는 미디어 서명 키와 영상 업로드 URL이 필요하지 않습니다. 기존 `MEDIA_SIGNING_KEY`와 이전 미디어 접근 경로는 변경하지 않습니다.
 

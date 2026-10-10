@@ -1,7 +1,7 @@
 import {parseYouTubeUrl} from './youtube-url.js';
 export const CHANNELS = [
   { id: 'youtube', name: '유튜브', account: '@spymedia3645', initial: '▶', type: 'source', format: '영상 · 가로 / 세로', ratio: '16:9' },
-  { id: 'instagram', name: '인스타그램', account: 'spymedia_kr', initial: '◎', type: 'separate', format: 'Meta Business Suite에서 별도 게시', ratio: '4:5' },
+  { id: 'instagram', name: '인스타그램', account: 'spymedia_kr', initial: '◎', type: 'separate', format: '원본 릴스 · 사진은 별도 도우미', ratio: '9:16' },
   { id: 'x', name: 'X', account: '@spymedia_kor', initial: '𝕏', type: 'both', format: '유튜브 링크 소개글', ratio: '16:9' },
   { id: 'facebook', name: '페이스북', account: '스파이미디어', initial: 'f', type: 'both', format: '유튜브 링크 소개글', ratio: '16:9' },
   { id: 'blog', name: '블로그', account: 'spymedia', initial: 'N', type: 'both', format: '원고 준비 · 반자동', ratio: '16:9' }

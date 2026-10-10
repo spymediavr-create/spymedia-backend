@@ -31,7 +31,7 @@ class Photos {
     if(!Number.isSafeInteger(size)||size<=0||size>LIMIT)throw error(413,'photo_too_large');
     let name;try{name=decodeURIComponent(req.headers['x-upload-name']||'');}catch{throw error(400,'invalid_filename');}
     if(!name||name.length>200||/[\x00-\x1f\x7f]/.test(name))throw error(400,'invalid_filename');
-    if(this.busy)throw error(429,'upload_busy');this.busy=true;let target;
+    if(this.store.uploadBusy)throw error(429,'upload_busy');this.store.uploadBusy=true;let target;
     try {
       await this.store.init();if(await this.store.usedBytes()+size>this.store.settings.maxStorageBytes)throw error(507,'storage_full');
       const id=crypto.randomUUID();target=this.store.file(id);const handle=await fs.open(target,'wx',0o600);let bytes=0,head=Buffer.alloc(0);const hash=crypto.createHash('sha256');
@@ -42,7 +42,7 @@ class Photos {
       if(duplicate){await fs.unlink(target);target=null;return duplicate;}
       const item={id,name,kind:'image',type,size,sha256,...info,profile:'link-photo',createdAt:new Date().toISOString()};
       await this.store.transaction(s=>{s.media[id]=item;});target=null;return item;
-    }finally{this.busy=false;if(target)await fs.unlink(target).catch(()=>{});}
+    }finally{this.store.uploadBusy=false;if(target)await fs.unlink(target).catch(()=>{});}
   }
 }
 module.exports={Photos,dimensions,LIMIT};

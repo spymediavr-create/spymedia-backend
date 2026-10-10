@@ -1,9 +1,10 @@
 import {CHANNELS,validateMedia,parseTags,recommendTags,composeCaption,draftIssues,formatBytes,xTextLength,shortXText} from './domain.js';
 import {parseYouTubeUrl} from './youtube-url.js';
 import {attachServerUI} from './server-ui.js';
+import {attachInstagramReels} from './instagram-reels.js';
 const $=selector=>document.querySelector(selector);
 const state={images:[],tags:[],suggestions:[],channels:new Set(['facebook','blog']),active:'facebook',importedPhoto:null,pending:null,xEdited:false};
-let backendStatus,toastTimer,importSequence=0,importing=false;
+let backendStatus,toastTimer,instagramReels,importSequence=0,importing=false;
 const channelStates=new Map();
 const node=(tag,className,text)=>{const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;};
 const element=node;
@@ -14,7 +15,7 @@ function currentUrl(){return parseYouTubeUrl($('#youtube-url').value)?.url||null
 function updateX(){if(!state.xEdited)$('#x-text').value=shortXText($('#title').value,$('#description').value,state.tags);$('#x-count').textContent=xTextLength($('#x-text').value+(currentUrl()?'\n\n'+currentUrl():''))+' / 280';}
 function channelLabel(id){
   if(id==='youtube')return backendStatus?.youtubeImportReady?'정보 가져오기 설정 준비':'정보 가져오기 연결 확인 전';
-  if(id==='instagram')return '별도 준비 · 링크 전송에서 제외';
+  if(id==='instagram')return '위 릴스 패널에서 별도 전송';
   if(id==='blog')return '원고 준비 · 반자동';
   return backendStatus?.channels?.[id]?.configured?'서버 설정 준비 · 인증 미검증':id==='x'?'X 연결 설정 필요 · 전송 불가':'연결 설정 필요 · 전송 불가';
 }
@@ -130,6 +131,7 @@ function renderChannels(){
   }));
 }
 function renderPreview(){
+  instagramReels?.updateDraft();
   $('#preview-tabs').replaceChildren(...CHANNELS.map((channel,index)=>{
     const tab=node('button','preview-tab '+(state.active===channel.id?'active':''),channel.name);tab.type='button';tab.id='tab-'+channel.id;tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(state.active===channel.id));tab.setAttribute('aria-controls','preview-content');tab.tabIndex=state.active===channel.id?0:-1;
     tab.addEventListener('click',()=>{state.active=channel.id;renderPreview();});tab.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?4:(index+(e.key==='ArrowRight'?1:-1)+5)%5;state.active=CHANNELS[next].id;renderPreview();$('#tab-'+state.active).focus();});return tab;
@@ -139,13 +141,13 @@ function renderPreview(){
   const title=$('#title').value.trim(),description=$('#description').value.trim(),url=currentUrl(),media=$('#preview-media');media.replaceChildren();media.dataset.kind='link';media.dataset.channel=channel.id;
   const picture=channel.id==='blog'&&state.images[0]?state.images[0].url:state.importedPhoto?.youtubeUrl===url?state.importedPhoto.preview:null;
   if(channel.id==='instagram'){
-    const hint=node('div','media-placeholder');hint.append(node('span','','◎'),node('p','','별도 화면에서 설명을 복사하고\nMeta Business Suite에서 파일을 선택합니다.'));media.append(hint);
+    const hint=node('div','media-placeholder');hint.append(node('span','','◎'),node('p','','위 릴스 패널에서 영상을 선택하고\n이 문구와 함께 저장·전송하세요.'));const link=node('a','outline-button','릴스 준비로 이동');link.href='#instagram-reels';hint.append(link);media.append(hint);
   }else{
     if(picture){const img=node('img');img.src=picture;img.alt=title||'소개 사진';media.append(img);}else{const hint=node('div','media-placeholder');hint.append(node('span','','▶'),node('p','','유튜브 원본 링크'));media.append(hint);}
     if(url){const a=node('a','youtube-preview-link','유튜브 본편 보기 ↗');a.href=url;a.target='_blank';a.rel='noopener noreferrer';media.append(a);}
   }
   $('#preview-title').textContent=title||'제목을 입력하세요';$('#preview-description').textContent=channel.id==='x'?$('#x-text').value||'X 소개 문구를 입력하세요':description||'설명을 입력하세요';$('#preview-tags').textContent=channel.id==='x'?url||'':state.tags.map(t=>'#'+t).join(' ');
-  $('#preview-warning').textContent=channel.id==='instagram'?'Instagram은 이번 링크 전송에서 제외됩니다. 준비 도우미의 복사·열기 기능으로 별도 게시하세요.':channel.id==='youtube'?'이미 YouTube에 올린 본편을 소개합니다. 여기서 YouTube 업로드를 실행하지 않습니다.':channel.id==='x'&&!backendStatus?.channels?.x?.configured?'X 연결 설정이 필요합니다. 미리보기·원고 준비는 가능하며 전송은 연결 후 진행합니다.':'실제 링크 카드 이미지는 플랫폼에 따라 달라질 수 있습니다.';
+  $('#preview-warning').textContent=channel.id==='instagram'?'릴스는 위 패널에서 원본 영상과 문구를 검사·저장한 뒤 별도로 전송합니다. 사진 게시와 Meta Business Suite 준비 도우미도 계속 사용할 수 있습니다.':channel.id==='youtube'?'이미 YouTube에 올린 본편을 소개합니다. 여기서 YouTube 업로드를 실행하지 않습니다.':channel.id==='x'&&!backendStatus?.channels?.x?.configured?'X 연결 설정이 필요합니다. 미리보기·원고 준비는 가능하며 전송은 연결 후 진행합니다.':'실제 링크 카드 이미지는 플랫폼에 따라 달라질 수 있습니다.';
   $('#blog-note').hidden=channel.id!=='blog';$('#copy-blog').hidden=channel.id!=='blog';
 }
 $('#copy-blog').addEventListener('click',async()=>{try{await navigator.clipboard.writeText([$('#title').value,$('#description').value,currentUrl(),state.tags.map(t=>'#'+t).join(' ')].filter(Boolean).join('\n\n'));toast('원고를 복사했습니다. 네이버에서 최종 게시하세요.');}catch{toast('미리보기의 텍스트를 선택해 복사하세요.');}});
@@ -166,10 +168,12 @@ window.addEventListener('beforeunload',()=>state.images.forEach(m=>URL.revokeObj
 try{
   const r=await fetch('/api/admin/status',{cache:'no-store'});if(!r.ok)throw Error();backendStatus=await r.json();const preview=backendStatus.mode==='preview';
   if(!preview&&!backendStatus.authenticated)location.replace('/admin/login?reason=session_expired');
-  $('#mode-label').textContent=preview?'로컬 미리보기':'관리자 세션';$('#mode-note').textContent=preview?'로컬 화면 시안입니다. 실제 API 정보 가져오기와 SNS 전송은 실행되지 않습니다.':'YouTube 정보를 가져와 검토한 뒤 Facebook·X 링크 소개와 블로그 원고를 준비하세요. 영상 변환은 사용하지 않습니다.';
+  $('#mode-label').textContent=preview?'로컬 미리보기':'관리자 세션';$('#mode-note').textContent=preview?'로컬 화면 시안입니다. 실제 API 정보 가져오기와 SNS 전송은 실행되지 않습니다.':'Facebook·X 링크 소개와 블로그 원고를 준비하거나, 원본 영상으로 Instagram 릴스를 준비하세요. 각 작업은 마지막 확인 후 전송됩니다.';
   $('#import-youtube').disabled=!backendStatus.authenticated||!backendStatus.youtubeImportReady;
   $('#leave-link').hidden=!preview;$('#logout-button').hidden=preview;
   if(preview)$('.ig-helper-link').href='/admin/instagram/preview';
   attachServerUI(backendStatus,()=>({type:'link',youtubeUrl:$('#youtube-url').value,title:$('#title').value,description:$('#description').value,tags:[...state.tags],xText:$('#x-text').value,channels:[...state.channels],mediaIds:state.importedPhoto?[state.importedPhoto.id]:[],photos:state.images.map(m=>m.file)}));
+  instagramReels=attachInstagramReels(backendStatus,()=>({title:$('#title').value,description:$('#description').value,tags:[...state.tags]}));
+  $('#storage-note').textContent=preview?'영상·사진은 로컬에서 미리보기만 합니다.':'링크 작업의 소개 사진과 릴스 검사·저장을 마친 원본을 서버에 보관합니다.';
 }catch{$('#mode-label').textContent='서버 확인 필요';$('#mode-note').textContent='서버 상태를 확인하지 못했습니다. 입력한 초안과 미리보기는 확인할 수 있습니다.';}
 renderFiles();renderTags();updateX();renderChannels();renderPreview();

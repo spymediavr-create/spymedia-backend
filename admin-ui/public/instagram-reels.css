@@ -1,0 +1,18 @@
+.reels-panel{padding:24px;margin-bottom:24px;scroll-margin-top:20px}
+.reels-panel h2{font-size:18px;margin-top:5px}.reels-panel h3{font-size:13px}
+.reels-account{flex:none;color:var(--cyan-dark);font-size:12px;font-weight:600}
+.reels-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
+.reels-file-panel,.reels-draft-panel{min-width:0;padding:18px;background:#f8fbfd;border:1px solid var(--line);border-radius:8px}
+.reels-file-panel.dragging{border-color:var(--cyan);background:#effbfe}
+.reels-file-panel>label{display:block;font-size:12px;font-weight:600;margin-bottom:8px}
+.reels-file-panel input[type=file]{min-width:0;max-width:100%;padding:8px;background:white}
+#reels-preview{display:block;width:100%;max-height:300px;object-fit:contain;background:#071b35;border-radius:5px;margin-top:14px}
+.reels-file-info{font-size:11px;margin:12px 0 5px;overflow-wrap:anywhere}
+.reels-caption{min-height:150px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.8;margin:12px 0;padding:12px;background:white;border:1px solid var(--line);border-radius:6px}
+.reels-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+#reels-prepare{margin-top:16px}.reels-connection{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:18px 0;border-bottom:1px solid var(--line)}
+.reels-connection span,#reels-feedback,#reels-media-status{font-size:12px;overflow-wrap:anywhere}#reels-feedback,#reels-media-status{margin-top:12px}
+.reels-jobs-heading{margin-top:22px}#reels-progress-wrap{display:flex;align-items:center;gap:8px;font-size:11px;margin-top:12px}
+#reels-progress-wrap label{flex:none}#reels-progress{min-width:0;flex:1;accent-color:var(--cyan)}
+#reels-jobs .record-details video{width:100%;max-height:340px}.reels-error{color:var(--danger)}
+@media(max-width:760px){.reels-panel{padding:18px 15px}.reels-layout{grid-template-columns:1fr;gap:12px}.reels-file-panel,.reels-draft-panel{padding:14px}.reels-account{font-size:10px}.reels-panel>.section-heading{align-items:start}.reels-caption{min-height:100px}.reels-jobs-heading{align-items:start}.reels-connection{gap:10px}.page-heading>.ig-helper-link{white-space:normal;max-width:125px;flex:none;text-align:center}}

@@ -4,6 +4,7 @@ const axios = require('axios');
 const {error} = require('./errors.cjs');
 const {providerFailure}=require('./diagnostics.cjs');
 const {XAuth}=require('./x-auth.cjs');
+const {validateReelMetadata}=require('./reels.cjs');
 const HOSTS = new Set(['graph.instagram.com','graph.facebook.com','graph-video.facebook.com','api.x.com','www.googleapis.com','oauth2.googleapis.com']);
 const TARGETS = {instagram:'spymedia_kr',facebook:'1387247911137772',x:'spymedia_kor',youtube:'UCw7OnhgTIih0M5PoMkwCDug'};
 const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms));
@@ -96,6 +97,30 @@ class Connectors {
         try{const u=new URL(result.permalink);if(u.protocol==='https:'&&['instagram.com','www.instagram.com'].includes(u.hostname)&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&/^\/(p|reel)\/[a-zA-Z0-9_-]+\/$/.test(u.pathname))url=u.href;}catch{}
         return {externalId:mediaId,url};
       }catch(e){e.phase='instagram_photo_verify';throw e;}
+    }
+    if(job.type==='instagram-reel'){
+      let container,mediaId;
+      try{
+        const asset=job.assets[0];
+        if(job.assets.length!==1||asset?.kind!=='video'||!['video/mp4','video/quicktime'].includes(asset.type)||asset.original!==true||asset.profile!=='instagram-reel-original'||!Number.isSafeInteger(asset.size)||asset.size<=0||asset.size>300_000_000)throw error(422,'instagram_reel_only');
+        validateReelMetadata(asset);
+        if(caption(job.input).length>2200)throw error(400,'instagram_content_limits');
+        container=identifier((await call('POST',id+'/media',{media_type:'REELS',video_url:this.mediaUrl(asset),caption:caption(job.input),share_to_feed:true})).data?.id);
+        await ctx.checkpoint({containerId:container});
+      }catch(e){e.phase='instagram_reel_create';throw e;}
+      try{await this.waitInstagram(call,container,{interval:60000});}catch(e){e.phase='instagram_reel_prepare';throw e;}
+      try{
+        await ctx.beforePublication({containerId:container});
+        mediaId=identifier((await call('POST',id+'/media_publish',{creation_id:container})).data?.id);
+        await ctx.checkpoint({externalId:mediaId});
+      }catch(e){e.phase='instagram_reel_publish';throw e;}
+      try{
+        const result=(await call('GET',mediaId+'?fields=id,permalink,media_product_type')).data;
+        if(result?.id!==mediaId||result.media_product_type!=='REELS')throw error(502,'verify_publication',true);
+        let url=null;
+        try{const u=new URL(result.permalink);if(u.protocol==='https:'&&['instagram.com','www.instagram.com'].includes(u.hostname)&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&/^\/(p|reel)\/[a-zA-Z0-9_-]+\/$/.test(u.pathname))url=u.href;}catch{}
+        return {externalId:mediaId,url,mediaProductType:'REELS'};
+      }catch(e){e.phase='instagram_reel_verify';throw e;}
     }
     const assets=job.assets,children=[];
     for(const asset of assets) {

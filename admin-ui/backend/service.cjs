@@ -8,6 +8,7 @@ const {Jobs} = require('./jobs.cjs');
 const {Connectors} = require('./connectors.cjs');
 const {Catalog} = require('./catalog.cjs');
 const {Photos}=require('./photos.cjs');
+const {Reels,LIMIT:REEL_LIMIT}=require('./reels.cjs');
 const {YouTubeSource}=require('./youtube-source.cjs');
 const {error} = require('./errors.cjs');
 class Service {
@@ -17,6 +18,7 @@ class Service {
     this.jobs=new Jobs(this.settings,this.store,this.media,this.connectors);
     this.catalog=new Catalog(this.store,this.jobs);
     this.photos=options.photos||new Photos(this.store);
+    this.reels=options.reels||new Reels(this.settings,this.store);
     this.youtubeSource=options.youtubeSource||new YouTubeSource(this.settings,this.photos);
     this.diagnosticNow=options.diagnosticNow||Date.now;this.facebookCheckBusy=false;this.facebookCheckNextAt=0;this.xCheckBusy=false;this.xCheckNextAt=0;
     this.instagramCheckBusy=false;this.instagramCheckNextAt=0;
@@ -54,7 +56,7 @@ class Service {
   }
   async status() {
     let storage=false;try{if(this.settings.storageConfigured){await this.store.init();storage=true;}}catch{}
-    return {uploadsConnected:storage,storageReady:storage,conversionReady:false,youtubeImportReady:!!this.settings.env.YOUTUBE_API_KEY,legacyPreparationDisabled:!this.settings.legacyPreparationEnabled,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,instagramConnection:this.connectors.describeInstagramConnection?.()||{credentialsConfigured:false,mediaDeliveryConfigured:false,publishingEnabled:false,publishingPermissionsVerified:false},xConnection:this.connectors.xAuth?.describe()||{authMode:null,credentialsConfigured:false,refreshConfigured:false,costAcknowledged:false,publishingPermissionsVerified:false},channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
+    return {uploadsConnected:storage,storageReady:storage,reelsUploadReady:storage,reelMaxBytes:REEL_LIMIT,conversionReady:false,youtubeImportReady:!!this.settings.env.YOUTUBE_API_KEY,legacyPreparationDisabled:!this.settings.legacyPreparationEnabled,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,instagramConnection:this.connectors.describeInstagramConnection?.()||{credentialsConfigured:false,mediaDeliveryConfigured:false,publishingEnabled:false,publishingPermissionsVerified:false},xConnection:this.connectors.xAuth?.describe()||{authMode:null,credentialsConfigured:false,refreshConfigured:false,costAcknowledged:false,publishingPermissionsVerified:false},channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
   }
   signedUrl(asset) {
     if(!this.settings.mediaKey||!this.settings.origin)throw error(503,'media_delivery_unavailable');

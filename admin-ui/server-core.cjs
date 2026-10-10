@@ -6,7 +6,7 @@ const scrypt = promisify(crypto.scrypt);
 const {Service} = require('./backend/service.cjs');
 const {failureDetails,safeFailureCode,logXConnectionFailure}=require('./backend/diagnostics.cjs');
 const root = path.join(__dirname, 'public');
-const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'record-ui.js', 'instagram-design.js', 'instagram-publish.js', 'instagram-publish.css'].map(file => ['/admin-assets/' + file, file]));
+const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'record-ui.js', 'instagram-design.js', 'instagram-publish.js', 'instagram-publish.css', 'instagram-reels.js', 'instagram-reels.css'].map(file => ['/admin-assets/' + file, file]));
 const SESSION_MS = 30 * 60 * 1000;
 const LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
@@ -88,6 +88,8 @@ function createAdminHandler(options = {}) {
           sessions.delete(sessionId);json(res,200,{authenticated:false},{'Set-Cookie':cookie('')});
         }else if(route==='/api/admin/media'&&req.method==='POST'){
           const media=await service.photos.upload(req);json(res,201,{media});
+        }else if(route==='/api/admin/reels'&&req.method==='POST'){
+          const media=await service.reels.upload(req);json(res,201,{media});
         }else if(route==='/api/admin/youtube/import'&&req.method==='POST'){
           const body=await readJson(req);json(res,200,{video:await service.youtubeSource.fetch(body.url)});
         }else if(route.startsWith('/api/admin/media/')&&['GET','HEAD'].includes(req.method)){
