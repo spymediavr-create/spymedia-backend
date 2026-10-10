@@ -10,6 +10,7 @@ const now = () => new Date().toISOString();
 const nativePhoto = job => job.type==='instagram-photo'&&job.channel==='instagram';
 const nativeReel = job => job.type==='instagram-reel'&&job.channel==='instagram';
 const nativeInstagram = job => nativePhoto(job)||nativeReel(job);
+const blogDraft = job => job.type==='blog-draft'&&job.channel==='blog';
 function input(body) {
   if(!body||typeof body.title!=='string'||typeof body.description!=='string'||!body.title.trim()||!body.description.trim()||body.title.length>200||body.description.length>5000||!Array.isArray(body.tags)||body.tags.length>30||body.tags.some(t=>typeof t!=='string'||!t||t.length>60||/[\s#<>\x00-\x1f]/.test(t)))throw error(400,'invalid_draft');
   if(!Array.isArray(body.channels)||!body.channels.length||body.channels.length>5||body.channels.some(c=>!CHANNELS.includes(c))||new Set(body.channels).size!==body.channels.length)throw error(400,'invalid_channel');
@@ -24,6 +25,7 @@ class Jobs {
   async create(body) {
     if(body?.type==='instagram-photo')return this.createInstagramPhoto(body);
     if(body?.type==='instagram-reel')return this.createInstagramReel(body);
+    if(body?.type==='blog-draft')return this.createBlogDraft(body);
     if(body?.type==='link')return this.createLink(body);
     input(body);
     if(!this.settings.legacyPreparationEnabled)throw error(409,'legacy_operation_disabled');
@@ -62,6 +64,26 @@ class Jobs {
       const existing=Object.values(state.jobs).find(j=>j.key===key);if(existing?.trashedAt)throw error(409,'job_in_trash');if(existing)return existing;
       const asset={id:reel.id,kind:'video',type:reel.type,size:reel.size,width:reel.width,height:reel.height,duration:reel.duration,videoCodec:reel.videoCodec,audioCodec:reel.audioCodec,frameRate:reel.frameRate,videoBitrate:reel.videoBitrate,audioSampleRate:reel.audioSampleRate,audioChannels:reel.audioChannels,audioBitrate:reel.audioBitrate,pixelFormat:reel.pixelFormat,fieldOrder:reel.fieldOrder,rotation:reel.rotation,fastStart:reel.fastStart,hasEditList:reel.hasEditList,profile:reel.profile,original:true};
       const item={id:crypto.randomUUID(),type:'instagram-reel',key,channel:'instagram',input:content,mediaIds:[reel.id],status:'prepared',assets:[asset],createdAt:now(),updatedAt:now(),publicationAttempted:false};
+      state.jobs[item.id]=item;return item;
+    });
+    return [this.view(job)];
+  }
+  async createBlogDraft(body) {
+    if(!Array.isArray(body.channels)||body.channels.length!==1||body.channels[0]!=='blog')throw error(400,'invalid_channel');
+    if(!Array.isArray(body.mediaIds)||body.mediaIds.length>10||new Set(body.mediaIds).size!==body.mediaIds.length||body.mediaIds.some(id=>typeof id!=='string'))throw error(400,'invalid_media_selection');
+    if(body.youtubeUrl!==undefined&&typeof body.youtubeUrl!=='string')throw error(400,'invalid_youtube_url');
+    const source=body.youtubeUrl?.trim()?parseYouTubeUrl(body.youtubeUrl):null;
+    if(body.youtubeUrl?.trim()&&!source)throw error(400,'invalid_youtube_url');
+    const checked=input({...body,mediaIds:body.mediaIds.length?body.mediaIds:['text-only'],youtubePrivacy:'private',madeForKids:undefined});
+    const content={title:checked.title,description:checked.description,tags:checked.tags,...(source?{youtubeUrl:source.url}:{})};
+    const originals=await Promise.all(body.mediaIds.map(id=>this.store.media(id)));
+    if(originals.some(m=>m.kind!=='image'||m.profile!=='link-photo'||!['image/jpeg','image/png','image/webp'].includes(m.type)||!Number.isSafeInteger(m.size)||m.size<=0||m.size>8*1024**2||!Number.isInteger(m.width)||!Number.isInteger(m.height)||m.width<1||m.height<1||m.width>4096||m.height>4096||m.width*m.height>16_000_000))throw error(422,'blog_photos_only');
+    if(originals.some(m=>m.trashedAt))throw error(409,'media_in_trash');
+    const job=await this.store.transaction(state=>{
+      if(originals.some(m=>state.media[m.id]?.trashedAt))throw error(409,'media_in_trash');
+      const key=crypto.createHash('sha256').update(JSON.stringify({version:1,type:'blog-draft',channel:'blog',input:content,media:originals.map(m=>m.sha256)})).digest('hex');
+      const existing=Object.values(state.jobs).find(item=>item.key===key);if(existing?.trashedAt)throw error(409,'job_in_trash');if(existing)return existing;
+      const item={id:crypto.randomUUID(),type:'blog-draft',key,channel:'blog',input:content,mediaIds:originals.map(m=>m.id),status:'prepared',assets:originals.map(m=>({id:m.id,kind:'image',type:m.type,size:m.size,width:m.width,height:m.height,original:true})),manuscript:caption(content),createdAt:now(),updatedAt:now(),publicationAttempted:false};
       state.jobs[item.id]=item;return item;
     });
     return [this.view(job)];
@@ -125,7 +147,7 @@ class Jobs {
   }
   async prepare(id) {
     const job=await this.store.job(id);if(job.status!=='converting'||job.preparationStarted)return;
-    if(job.type==='link'||nativeInstagram(job))return;
+    if(job.type==='link'||nativeInstagram(job)||blogDraft(job))return;
     await this.store.transaction(s=>{s.jobs[id].preparationStarted=true;});
     try{
       const assets=[...job.assets];
@@ -137,7 +159,7 @@ class Jobs {
     if(!this.settings.publishingEnabled)throw error(503,'publishing_disabled');
     if(!Array.isArray(ids)||!ids.length||ids.length>4||new Set(ids).size!==ids.length)throw error(400,'invalid_job_selection');
     await this.store.transaction(state=>{
-      if(ids.some(id=>state.jobs[id]&&state.jobs[id].type!=='link'&&!nativeInstagram(state.jobs[id])&&!this.settings.legacyPreparationEnabled))throw error(409,'legacy_operation_disabled');
+      if(ids.some(id=>state.jobs[id]&&state.jobs[id].type!=='link'&&!nativeInstagram(state.jobs[id])&&!blogDraft(state.jobs[id])&&!this.settings.legacyPreparationEnabled))throw error(409,'legacy_operation_disabled');
       for(const id of ids){const job=state.jobs[id];if(!job||job.channel==='blog'||job.status!=='prepared'||job.publicationAttempted)throw error(409,'job_not_ready');if(job.trashedAt)throw error(409,'job_in_trash');if(job.mediaIds.some(mediaId=>state.media[mediaId]?.trashedAt))throw error(409,'media_in_trash');if(!this.connectors.availability()[job.channel])throw error(503,'channel_not_configured');}
       for(const id of ids)Object.assign(state.jobs[id],{status:'queued',approvedAt:now(),updatedAt:now()});
     });
@@ -163,13 +185,13 @@ class Jobs {
     return this.list();
   }
   view(job) {
-    const legacyReadOnly=job.type!=='link'&&!nativeInstagram(job)&&!this.settings.legacyPreparationEnabled;
+    const legacyReadOnly=job.type!=='link'&&!nativeInstagram(job)&&!blogDraft(job)&&!this.settings.legacyPreparationEnabled;
     const mediaInTrash=job.mediaIds.some(id=>this.store.state.media[id]?.trashedAt);
     const sourceMedia=job.mediaIds.map(id=>{
       const media=this.store.state.media[id];
       return {kind:media?.kind||null,name:typeof media?.name==='string'&&media.name?media.name:null};
     });
-    return {id:job.id,type:job.type||'legacy',youtubeUrl:job.input.youtubeUrl||null,legacyReadOnly,channel:job.channel,status:job.status,error:job.error||null,errorDetails:failureDetails(job.errorDetails||{}),trashedAt:job.trashedAt||null,mediaInTrash,canTrash:!job.trashedAt&&!PROTECTED.has(job.status),canSend:!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='prepared'&&!job.publicationAttempted,canRetry:!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='failed'&&!job.publicationAttempted,title:job.input.title,caption:caption(job.input),sourceMedia,createdAt:job.createdAt,updatedAt:job.updatedAt,result:job.result||null,assets:job.assets.map(a=>({id:a.id,kind:a.kind,type:a.type,size:a.size,width:a.width,height:a.height,duration:a.duration,preview:'/api/admin/media/'+a.id+(a.original?'?preview=1':'?converted=1')})),originals:job.channel==='blog'?job.mediaIds.map(id=>({id,download:'/api/admin/media/'+id})):[],manuscript:job.manuscript||null,youtubePrivacy:job.channel==='youtube'?job.input.youtubePrivacy:null,madeForKids:job.channel==='youtube'?job.input.madeForKids:null};
+    return {id:job.id,type:job.type||'legacy',youtubeUrl:job.input.youtubeUrl||null,legacyReadOnly,channel:job.channel,status:job.status,error:job.error||null,errorDetails:failureDetails(job.errorDetails||{}),trashedAt:job.trashedAt||null,mediaInTrash,canTrash:!job.trashedAt&&!PROTECTED.has(job.status),canSend:!blogDraft(job)&&!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='prepared'&&!job.publicationAttempted,canRetry:!blogDraft(job)&&!legacyReadOnly&&!job.trashedAt&&!mediaInTrash&&job.status==='failed'&&!job.publicationAttempted,title:job.input.title,caption:caption(job.input),sourceMedia,createdAt:job.createdAt,updatedAt:job.updatedAt,result:job.result||null,assets:job.assets.map(a=>({id:a.id,kind:a.kind,type:a.type,size:a.size,width:a.width,height:a.height,duration:a.duration,preview:'/api/admin/media/'+a.id+(a.original?'?preview=1':'?converted=1')})),originals:job.channel==='blog'?job.mediaIds.map(id=>({id,download:'/api/admin/media/'+id})):[],manuscript:job.manuscript||null,...(job.channel==='blog'?{blogDraft:{title:job.input.title,description:job.input.description,tags:[...job.input.tags],youtubeUrl:job.input.youtubeUrl||''}}:{}),youtubePrivacy:job.channel==='youtube'?job.input.youtubePrivacy:null,madeForKids:job.channel==='youtube'?job.input.madeForKids:null};
   }
   async list() {await this.store.init();return Object.values(this.store.state.jobs).filter(job=>!job.trashedAt).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,100).map(j=>this.view(j));}
 }

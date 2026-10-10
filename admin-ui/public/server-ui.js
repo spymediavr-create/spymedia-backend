@@ -10,6 +10,7 @@ Object.assign(ERRORS,{x_unauthorized:'X 인증이 거절됐습니다. 기존 인
 const $=id=>document.getElementById(id);
 function el(tag,text){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;}
 export function describeJobMedia(job) {
+  if(job.type==='blog-draft')return {label:'블로그 원고 · 사진 '+(job.sourceMedia?.length||0)+'장',filenames:(job.sourceMedia||[]).map(item=>item.name||'파일명 기록 없음')};
   if(job.type==='link')return {label:'유튜브 링크 1개'+(job.sourceMedia?.length?' · 블로그 참고 사진 '+job.sourceMedia.length+'장':''),filenames:(job.sourceMedia||[]).map(item=>item.name||'파일명 기록 없음')};
   const sources=Array.isArray(job.sourceMedia)&&job.sourceMedia.length?job.sourceMedia:[];
   const entries=sources.length?sources:(job.assets||[]);
@@ -64,8 +65,8 @@ export function attachServerUI(status,getDraft) {
     $('server-jobs').replaceChildren(...jobs.map(job=>{
       const check=el('input');check.type='checkbox';check.checked=chosen.has(job.id);check.disabled=busy||sessionExpired||job.type!=='link'||!['facebook','x'].includes(job.channel)||job.canSend===false||job.status!=='prepared'||job.channel==='blog'||!status.channels?.[job.channel]?.configured;
       check.addEventListener('change',()=>{check.checked?chosen.add(job.id):chosen.delete(job.id);updateButton();});
-      const card=createRecordRow({id:job.id,title:job.title||'제목 없음',createdAt:job.createdAt,channel:NAMES[job.channel]||job.channel,status:STATES[job.status]||job.status,statusKey:job.status,check,className:'job-card',expanded:expanded.has(job.id),onToggle:open=>{open?expanded.add(job.id):expanded.delete(job.id);},fillDetails:panel=>{
-        panel.append(el('h4',job.title),el('p','채널: '+NAMES[job.channel]+' · '+(STATES[job.status]||job.status)),el('p',job.caption));
+      const card=createRecordRow({id:job.id,title:job.title||'제목 없음',createdAt:job.createdAt,channel:NAMES[job.channel]||job.channel,status:job.channel==='blog'&&job.status==='prepared'?'원고 저장':STATES[job.status]||job.status,statusKey:job.status,check,className:'job-card',expanded:expanded.has(job.id),onToggle:open=>{open?expanded.add(job.id):expanded.delete(job.id);},fillDetails:panel=>{
+        panel.append(el('h4',job.title),el('p','채널: '+NAMES[job.channel]+' · '+(job.channel==='blog'&&job.status==='prepared'?'원고 저장':STATES[job.status]||job.status)),el('p',job.caption));
         const mediaDescription=describeJobMedia(job);const label=el('p','미디어: '+mediaDescription.label);label.className='job-media-label';
         const files=el('ul');files.className='job-files';mediaDescription.filenames.forEach(name=>files.append(el('li',name)));panel.append(label,files,jobDiagnostics(job));
         if(job.legacyReadOnly)panel.append(el('p','기존 미디어 작업 · 이력 조회만 지원합니다. 새 링크 소개를 준비하세요.'));
@@ -78,7 +79,7 @@ export function attachServerUI(status,getDraft) {
         if(job.channel==='blog'){
           const copy=el('button','원고 복사');copy.type='button';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(job.manuscript);$('server-feedback').textContent='원고를 복사했습니다. 이미지를 내려받아 네이버에서 최종 게시하세요.';}catch{$('server-feedback').textContent='원고 텍스트를 선택해 복사하세요.';}});panel.append(copy);
           (job.originals||[]).forEach((media,i)=>{const a=el('a','원본 '+(i+1)+' 다운로드');a.href=media.download;a.download='';panel.append(a);});
-          if(job.type!=='link')(job.assets||[]).forEach((media,i)=>{const a=el('a','준비한 이미지 '+(i+1)+' 다운로드');a.href=media.preview;a.download='blog-image-'+(i+1)+'.jpg';panel.append(a);});
+          if(job.type!=='link'&&job.type!=='blog-draft')(job.assets||[]).forEach((media,i)=>{const a=el('a','준비한 이미지 '+(i+1)+' 다운로드');a.href=media.preview;a.download='blog-image-'+(i+1)+'.jpg';panel.append(a);});
         }
         if(job.result?.url){try{const url=new URL(job.result.url);if(url.protocol==='https:'&&/^(www\.)?(youtube\.com|instagram\.com|facebook\.com|x\.com)$/.test(url.hostname)){const a=el('a','채널에서 확인');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';panel.append(a);}}catch{}}
         if(job.result?.privacyStatus)panel.append(el('small','유튜브 실제 공개 상태: '+job.result.privacyStatus));

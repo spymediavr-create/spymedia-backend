@@ -64,13 +64,13 @@ export function attachCatalogUI({api,isBusy,setBusy,refreshJobs,describeJobMedia
       const title=kind==='media'?item.name||'파일명 기록 없음':item.title||'제목 없음';
       const check=node('input');check.type='checkbox';check.checked=selected.has(item.id);check.dataset.allowed=String(bin==='trash'||!!item.canTrash);
       check.addEventListener('change',()=>{check.checked?selected.add(item.id):selected.delete(item.id);updateControls();});
-      return createRecordRow({id:item.id,title,createdAt:item.createdAt,channel:kind==='media'?(item.kind==='video'?'영상':'이미지'):NAMES[item.channel]||item.channel,status:kind==='media'?(bin==='trash'?'휴지통':item.canTrash?'보관 중':'사용 중'):STATES[item.status]||item.status,statusKey:kind==='media'?(bin==='trash'?'trash':item.canTrash?'stored':'protected'):item.status,check,className:'catalog-row',expanded:expanded.has(item.id),onToggle:open=>{open?expanded.add(item.id):expanded.delete(item.id);},fillDetails:panel=>{
+      return createRecordRow({id:item.id,title,createdAt:item.createdAt,channel:kind==='media'?(item.kind==='video'?'영상':'이미지'):NAMES[item.channel]||item.channel,status:kind==='media'?(bin==='trash'?'휴지통':item.canTrash?'보관 중':'사용 중'):item.channel==='blog'&&item.status==='prepared'?'원고 저장':STATES[item.status]||item.status,statusKey:kind==='media'?(bin==='trash'?'trash':item.canTrash?'stored':'protected'):item.status,check,className:'catalog-row',expanded:expanded.has(item.id),onToggle:open=>{open?expanded.add(item.id):expanded.delete(item.id);},fillDetails:panel=>{
         panel.append(node('h4',title));
         if(kind==='media') {
           panel.append(node('p',(item.kind==='video'?'영상':'이미지')+' · '+formatBytes(item.size||0)+' · 보관 '+date(item.createdAt)+' · 관련 작업 '+item.relatedJobs+'개'));
           const a=node('a','원본 다운로드');a.href=item.download;a.download='';panel.append(a);
         } else {
-          const media=describeJobMedia(item);panel.append(node('p','채널: '+NAMES[item.channel]+' · '+(STATES[item.status]||item.status)),node('p',item.caption||''),node('p','미디어: '+media.label),node('p',media.filenames.join(' · ')),jobDiagnostics(item));
+          const media=describeJobMedia(item);panel.append(node('p','채널: '+NAMES[item.channel]+' · '+(item.channel==='blog'&&item.status==='prepared'?'원고 저장':STATES[item.status]||item.status)),node('p',item.caption||''),node('p','미디어: '+media.label),node('p',media.filenames.join(' · ')),jobDiagnostics(item));
           if(item.legacyReadOnly)panel.append(node('p','기존 미디어 작업 · 이력 조회만 지원합니다.'));
           for(const asset of item.assets||[]){const media=node(asset.kind==='video'?'video':'img');media.src=asset.preview;if(asset.kind==='video'){media.controls=true;media.preload='metadata';}else media.alt=title;panel.append(media);}
           if(item.mediaInTrash)panel.append(node('p','원본 파일이 휴지통에 있습니다. 복원 후 작업을 준비할 수 있습니다.'));

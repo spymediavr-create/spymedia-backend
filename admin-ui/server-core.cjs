@@ -6,7 +6,7 @@ const scrypt = promisify(crypto.scrypt);
 const {Service} = require('./backend/service.cjs');
 const {failureDetails,safeFailureCode,logXConnectionFailure,logReelUploadFailure}=require('./backend/diagnostics.cjs');
 const root = path.join(__dirname, 'public');
-const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'record-ui.js', 'instagram-design.js', 'instagram-publish.js', 'instagram-publish.css', 'instagram-reels.js', 'instagram-reels.css', 'instagram-suite.js'].map(file => ['/admin-assets/' + file, file]));
+const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'record-ui.js', 'instagram-design.js', 'instagram-publish.js', 'instagram-publish.css', 'instagram-reels.js', 'instagram-reels.css', 'instagram-suite.js', 'blog-workspace.js', 'blog-workspace.css'].map(file => ['/admin-assets/' + file, file]));
 const SESSION_MS = 30 * 60 * 1000;
 const LIMIT_WINDOW_MS = 10 * 60 * 1000;
 

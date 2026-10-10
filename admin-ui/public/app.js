@@ -3,9 +3,10 @@ import {parseYouTubeUrl} from './youtube-url.js';
 import {attachServerUI} from './server-ui.js';
 import {attachInstagramReels} from './instagram-reels.js';
 import {attachInstagramSuite} from './instagram-suite.js';
+import {attachBlogWorkspace} from './blog-workspace.js';
 const $=selector=>document.querySelector(selector);
 const state={images:[],tags:[],suggestions:[],channels:new Set(['facebook','blog']),active:'facebook',importedPhoto:null,pending:null,xEdited:false};
-let backendStatus,toastTimer,instagramReels,instagramSuite,importSequence=0,importing=false;
+let backendStatus,toastTimer,instagramReels,instagramSuite,blogWorkspace,importSequence=0,importing=false;
 const channelStates=new Map();
 const node=(tag,className,text)=>{const n=document.createElement(tag);if(className)n.className=className;if(text!==undefined)n.textContent=text;return n;};
 const element=node;
@@ -134,6 +135,7 @@ function renderChannels(){
 function renderPreview(){
   instagramSuite?.updateDraft();
   instagramReels?.updateDraft();
+  blogWorkspace?.updateDraft();
   $('#preview-tabs').replaceChildren(...CHANNELS.map((channel,index)=>{
     const tab=node('button','preview-tab '+(state.active===channel.id?'active':''),channel.name);tab.type='button';tab.id='tab-'+channel.id;tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(state.active===channel.id));tab.setAttribute('aria-controls','preview-content');tab.tabIndex=state.active===channel.id?0:-1;
     tab.addEventListener('click',()=>{state.active=channel.id;renderPreview();});tab.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?4:(index+(e.key==='ArrowRight'?1:-1)+5)%5;state.active=CHANNELS[next].id;renderPreview();$('#tab-'+state.active).focus();});return tab;
@@ -152,7 +154,8 @@ function renderPreview(){
   $('#preview-warning').textContent=channel.id==='instagram'?'Meta Business Suite에서 spymedia_kr를 선택하고 릴스 만들기를 여세요. 원본 영상 선택·문구 붙여넣기·최종 게시는 Meta에서 직접 진행합니다.':channel.id==='youtube'?'이미 YouTube에 올린 본편을 소개합니다. 여기서 YouTube 업로드를 실행하지 않습니다.':channel.id==='x'&&!backendStatus?.channels?.x?.configured?'X 연결 설정이 필요합니다. 미리보기·원고 준비는 가능하며 전송은 연결 후 진행합니다.':'실제 링크 카드 이미지는 플랫폼에 따라 달라질 수 있습니다.';
   $('#blog-note').hidden=channel.id!=='blog';$('#copy-blog').hidden=channel.id!=='blog';
 }
-$('#copy-blog').addEventListener('click',async()=>{try{await navigator.clipboard.writeText([$('#title').value,$('#description').value,currentUrl(),state.tags.map(t=>'#'+t).join(' ')].filter(Boolean).join('\n\n'));toast('원고를 복사했습니다. 네이버에서 최종 게시하세요.');}catch{toast('미리보기의 텍스트를 선택해 복사하세요.');}});
+$('#copy-blog').textContent='블로그 전용 원고 준비로 이동';
+$('#copy-blog').addEventListener('click',()=>{$('#blogWorkspace').scrollIntoView({behavior:'smooth',block:'start'});$('#blogWorkspace').focus({preventScroll:true});});
 $('#check-draft').addEventListener('click',()=>{
   const issues=draftIssues({title:$('#title').value,description:$('#description').value,youtubeUrl:$('#youtube-url').value,channels:state.channels,xText:$('#x-text').value});
   const box=$('#draft-feedback');box.replaceChildren();if(issues.length){const list=node('ul');issues.forEach(text=>list.append(node('li','',text)));box.append(node('strong','','준비할 항목'),list);}else box.append(node('strong','','링크 소개 입력이 준비됐습니다.'),node('p','','서버 작업을 준비한 뒤 선택한 작업의 전송을 명시적으로 확인하세요.'));
@@ -165,12 +168,14 @@ $('.ig-helper-link').addEventListener('click',event=>{
   helper.location.replace($('.ig-helper-link').href);
 });
 $('#logout-button').addEventListener('click',async()=>{try{const r=await fetch('/api/admin/logout',{method:'POST',headers:{'X-CSRF-Token':backendStatus?.csrfToken||''}});if(!r.ok)throw Error();location.replace('/admin/login');}catch{toast('로그아웃을 확인하지 못했습니다. 다시 시도하세요.');}});
-window.addEventListener('sns-job-status',e=>{const labels={converting:'규격 변환 중',prepared:'전송 준비',queued:'전송 대기',publishing:'전송 확인 중',succeeded:'완료',failed:'실패',unknown:'결과 확인 필요'};channelStates.clear();for(const job of e.detail)if(!channelStates.has(job.channel))channelStates.set(job.channel,'최근 작업: '+labels[job.status]);renderChannels();renderPreview();});
+window.addEventListener('sns-job-status',e=>{const labels={converting:'규격 변환 중',prepared:'전송 준비',queued:'전송 대기',publishing:'전송 확인 중',succeeded:'완료',failed:'실패',unknown:'결과 확인 필요'};channelStates.clear();for(const job of e.detail)if(!channelStates.has(job.channel))channelStates.set(job.channel,'최근 작업: '+(job.channel==='blog'&&job.status==='prepared'?'원고 저장':labels[job.status]));renderChannels();renderPreview();});
 window.addEventListener('beforeunload',()=>state.images.forEach(m=>URL.revokeObjectURL(m.url)));
 instagramSuite=attachInstagramSuite(()=>({title:$('#title').value,description:$('#description').value,tags:[...state.tags]}));
+blogWorkspace=attachBlogWorkspace(()=>({title:$('#title').value,description:$('#description').value,tags:[...state.tags],region:$('#region').value,shootType:$('#shoot-type').value,youtubeUrl:$('#youtube-url').value,photos:[...(state.importedPhoto&&state.importedPhoto.youtubeUrl===currentUrl()?[{key:'saved:'+state.importedPhoto.id,id:state.importedPhoto.id,preview:safePreview(state.importedPhoto.preview),name:'유튜브 썸네일'}]:[]),...state.images.map(media=>({key:media.url,file:media.file,preview:media.url,name:media.file.name}))]}));
 try{
   const r=await fetch('/api/admin/status',{cache:'no-store'});if(!r.ok)throw Error();backendStatus=await r.json();const preview=backendStatus.mode==='preview';
   if(!preview&&!backendStatus.authenticated)location.replace('/admin/login?reason=session_expired');
+  blogWorkspace.setStatus(backendStatus);
   $('#mode-label').textContent=preview?'로컬 미리보기':'관리자 세션';$('#mode-note').textContent=preview?'로컬 화면 시안입니다. 문구 복사와 Meta Business Suite 열기를 사용할 수 있습니다. API 정보 가져오기와 관리자 전송은 실행되지 않습니다.':'Instagram 릴스는 문구를 복사하고 Meta Business Suite에서 게시하세요. Facebook·X 링크 소개와 블로그 원고도 함께 준비할 수 있습니다.';
   $('#import-youtube').disabled=!backendStatus.authenticated||!backendStatus.youtubeImportReady;
   $('#leave-link').hidden=!preview;$('#logout-button').hidden=preview;
