@@ -1,5 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const {pipeline} = require('node:stream/promises');
 const crypto = require('node:crypto');
 const {promisify} = require('node:util');
 const scrypt = promisify(crypto.scrypt);
@@ -7,6 +8,15 @@ const {Service} = require('./backend/service.cjs');
 const {failureDetails,safeFailureCode,logXConnectionFailure,logReelUploadFailure}=require('./backend/diagnostics.cjs');
 const root = path.join(__dirname, 'public');
 const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtube-url.js', 'server-ui.js', 'catalog-ui.js', 'record-ui.js', 'instagram-design.js', 'instagram-publish.js', 'instagram-publish.css', 'instagram-reels.js', 'instagram-reels.css', 'instagram-suite.js', 'blog-workspace.js', 'blog-workspace.css'].map(file => ['/admin-assets/' + file, file]));
+assets.set('/admin-assets/reel-preparation.js', 'reel-preparation.js');
+// Serve only the browser runtime's known files, never expose node_modules as a directory.
+const vendorAssets = new Map();
+for (const file of ['index.js','classes.js','const.js','errors.js','types.js','utils.js','worker.js']) {
+  vendorAssets.set('/admin-assets/vendor/ffmpeg/' + file, path.join(__dirname, '../node_modules/@ffmpeg/ffmpeg/dist/esm', file));
+}
+for (const file of ['ffmpeg-core.js','ffmpeg-core.wasm']) {
+  vendorAssets.set('/admin-assets/vendor/ffmpeg-core/' + file, path.join(__dirname, '../node_modules/@ffmpeg/core/dist/esm', file));
+}
 const SESSION_MS = 30 * 60 * 1000;
 const LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
@@ -48,7 +58,7 @@ function createAdminHandler(options = {}) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     const sessionId = session(req);
     const authenticated = !!sessionId;
@@ -119,6 +129,20 @@ function createAdminHandler(options = {}) {
         }else if(['/api/admin/catalog/trash','/api/admin/catalog/restore'].includes(route)&&req.method==='POST'){
           const body=await readJson(req);json(res,200,await service.catalog.change(body.kind,body.ids,route.endsWith('/restore')));
         }else json(res,404,{error:'not_found'});
+      } else if (vendorAssets.has(route)) {
+        if (!authenticated && !preview) { json(res, 401, {error:'authentication_required'}); return true; }
+        if (!['GET','HEAD'].includes(req.method)) { json(res, 405, {error:'method_not_allowed'}, {'Allow':'GET, HEAD'}); return true; }
+        const handle = await fs.open(vendorAssets.get(route), 'r');
+        try {
+          const stat = await handle.stat();
+          // Only the dedicated worker can compile Wasm. Main-page JavaScript still disallows eval.
+          res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'");
+          res.setHeader('Cache-Control', 'private, max-age=86400');
+          res.setHeader('Vary', 'Cookie');
+          res.writeHead(200, {'Content-Type':route.endsWith('.wasm')?'application/wasm':'text/javascript; charset=utf-8','Content-Length':stat.size});
+          if (req.method === 'HEAD') res.end();
+          else await pipeline(handle.createReadStream({autoClose:false}), res);
+        } finally { await handle.close(); }
       } else if (req.method !== 'GET') {
         json(res, 405, {error:'Method not allowed'}, {'Allow':'GET'});
       } else if (assets.has(route)) {

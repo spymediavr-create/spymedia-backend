@@ -37,13 +37,21 @@
       <section id="instagram-reels" class="panel reels-panel" aria-labelledby="reels-heading" hidden>
       <div class="section-heading"><div><span class="eyebrow">INSTAGRAM REELS</span><h2 id="reels-heading">인스타그램 릴스</h2><p class="field-hint">MP4·MOV 원본 영상을 직접 선택하세요. 유튜브 시청 링크는 릴스 원본으로 사용할 수 없습니다.</p></div><span class="reels-account">◎ spymedia_kr</span></div>
       <div class="reels-layout"><div class="reels-file-panel" id="reels-drop">
-        <label for="reels-file">1. 릴스 영상 선택</label><input id="reels-file" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" aria-describedby="reels-specs reels-file-info">
+        <label for="reels-file">1. 릴스 영상 선택</label><p id="reels-drop-hint" class="field-hint">이 영역에 영상을 끌어다 놓으면 게시용 사본을 자동으로 준비합니다. 파일 선택으로 고른 영상은 아래 ‘게시용 파일 만들기’를 누르세요.</p><input id="reels-file" type="file" accept="video/mp4,video/quicktime,.mp4,.mov" aria-describedby="reels-drop-hint reels-specs reels-file-info">
         <p id="reels-specs" class="field-hint">MP4·MOV · 최대 300MB · H.264/HEVC · AAC 오디오 · 23~60fps · 3초~15분 · 가로 1920px 이하. 세로 9:16을 권장합니다.</p>
         <video id="reels-preview" controls playsinline preload="metadata" hidden aria-label="선택한 릴스 영상 미리보기"></video>
         <p id="reels-file-info" class="reels-file-info">선택한 영상이 없습니다.</p><p id="reels-local-check" class="field-hint">브라우저에서는 코덱과 프레임률을 확정할 수 없습니다. 저장 시 서버에서 최종 검사합니다.</p>
+        <div id="reels-local-preparation" class="reels-local-preparation" aria-labelledby="reels-local-heading">
+          <h3 id="reels-local-heading">게시용 사본 준비</h3>
+          <p id="reels-local-help" class="field-hint">편집 목록·음성 규격 오류가 있다면 현재 PC에서 사본을 만드세요. 영상은 재압축하지 않고, 필요한 경우에만 음성을 조정합니다. 원본 파일은 그대로 유지됩니다.</p>
+          <div class="reels-actions"><button id="reels-make-ready" type="button" class="outline-button" disabled aria-describedby="reels-local-help">게시용 파일 만들기</button><button id="reels-local-cancel" type="button" class="text-button" hidden>준비 취소</button><a id="reels-download" class="outline-button" hidden download>사본 내려받기</a><button id="reels-original" type="button" class="text-button" hidden>원본으로 돌아가기</button></div>
+          <div id="reels-local-progress-wrap" hidden><label for="reels-local-progress">PC에서 준비 중</label><progress id="reels-local-progress" max="100" value="0"></progress><span id="reels-local-progress-label" role="status" aria-live="polite"></span></div>
+          <p id="reels-local-result" role="status" aria-live="polite"></p>
+          <p class="field-hint">사본을 만든 뒤 아래 ‘영상 검사·저장’을 누르세요. 이미 규격에 맞는 원본은 바로 검사·저장할 수 있습니다.</p>
+        </div>
         <div class="reels-actions"><button id="reels-clear" type="button" class="text-button" disabled>선택 해제</button><button id="reels-upload" type="button" class="outline-button" disabled>2. 영상 검사·저장</button><button id="reels-cancel" type="button" class="text-button" hidden>업로드 취소</button></div>
         <div id="reels-progress-wrap" hidden><label for="reels-progress">서버로 보내는 중</label><progress id="reels-progress" max="100" value="0"></progress><span id="reels-progress-label" role="status">0%</span></div>
-        <p id="reels-media-status" role="status" aria-live="polite"></p><p class="field-hint">검사를 통과한 원본을 보관합니다. 자동 자르기·변환은 하지 않습니다. 파일을 선택하거나 저장하는 것만으로 게시되지 않습니다.</p>
+        <p id="reels-media-status" role="status" aria-live="polite"></p><p class="field-hint">검사를 통과한 선택 파일을 보관합니다. 서버에서 재인코딩하지 않습니다. 사본 준비·저장만으로 게시되지 않습니다.</p>
       </div><div class="reels-draft-panel"><h3>릴스 문구 미리보기</h3><p id="reels-caption" class="reels-caption">위 콘텐츠 정보에 제목과 설명을 입력하세요.</p><span id="reels-caption-count" class="quiet-label">0 / 2,200자</span><p id="reels-draft-warning" class="field-error" role="status"></p><p id="reels-saved-note" class="field-hint"></p><button id="reels-prepare" type="button" class="outline-button" disabled>3. 릴스 작업 준비</button><p class="field-hint">현재 문구와 검사한 영상을 작업으로 저장합니다. 준비 후 편집한 내용은 기존 작업에 반영되지 않습니다.</p></div></div>
       <div class="reels-connection"><button id="reels-check" type="button" class="outline-button" disabled>계정·게시 권한 확인</button><span id="reels-connection-status" role="status" aria-live="polite">서버 연결 상태를 확인하고 있습니다.</span></div>
       <div class="section-heading reels-jobs-heading"><div><h3>저장한 릴스 작업과 결과</h3><p class="field-hint">전송할 작업 1개를 선택하세요. 계정·원본·저장 문구를 마지막으로 확인한 뒤 게시합니다.</p></div><button id="reels-refresh" type="button" class="outline-button" disabled>결과 새로고침</button></div>
