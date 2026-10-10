@@ -1,6 +1,6 @@
 # SNS 링크 소개·Instagram·블로그 운영 안내
 
-메인 관리자의 Instagram 기본 흐름은 문구 복사 후 Meta Business Suite에서 원본 영상을 직접 선택·게시하는 방식이다. 이 흐름은 서버 영상 업로드·검사·변환을 사용하지 않는다. 기존 관리자 릴스 전송·작업 이력은 접힌 영역에 보존한다. 자세한 내용은 [Instagram 운영 안내](INSTAGRAM-OPERATIONS.md)를 따르며, 아래 Facebook·X의 YouTube 링크 방식과 블로그 소개 사진 기능은 유지한다.
+메인 관리자의 Instagram 기본 흐름은 사진/릴스를 선택하고 원본과 문구를 저장한 뒤 공식 게시 API로 전송하는 방식이다. 계정·게시 권한과 저장된 파일·문구를 확인한 뒤 사용자가 전송한다. 서버 재인코딩은 하지 않으며 Meta Business Suite 도우미는 접힌 보조 영역에 보존한다. 자세한 내용은 [Instagram 운영 안내](INSTAGRAM-OPERATIONS.md)를 따르며, 아래 Facebook·X의 YouTube 링크 방식과 블로그 소개 사진 기능은 유지한다.
 
 기존 대상은 [Render 서비스](https://dashboard.render.com/web/srv-d81bo0rtqb8s738pcv6g), `spymediavr-create/spymedia-backend`의 main, https://spymedia-backend.onrender.com 입니다. 기존 디스크 `/spymedia` 10GB, 데이터 `/spymedia/sns`, 단일 인스턴스와 홈페이지 API·자동 실행 설정을 보존합니다. 요금제·디스크·환경변수 값을 임의 변경하지 않습니다.
 
@@ -12,7 +12,7 @@ main push는 자동 배포를 시작합니다. 승인 전에는 push·배포·�
 2. 관리자에서 주소로 공개 제목·설명·썸네일을 조회하고 적용·수정합니다.
 3. Facebook·X 링크 소개와 블로그 원고를 준비합니다. 준비는 게시를 실행하지 않습니다.
 4. 사용자가 정확한 문구·주소·채널을 확인한 뒤 선택한 Facebook·X 작업을 전송합니다.
-5. 블로그는 준비 자료를 이용해 사용자가 최종 게시합니다. Instagram 영상은 메인 영역에서 문구를 복사하고 Meta Business Suite에서 파일 선택·문구 붙여넣기·게시를 진행합니다. 별도 사진 도우미와 접힌 기존 관리자 릴스 전송 기능도 유지합니다.
+5. 블로그는 준비 자료를 이용해 사용자가 최종 게시합니다. Instagram은 메인 영역에서 사진/릴스를 선택하고 원본 검사·저장, 작업 준비, 계정·게시 권한 확인, 저장된 작업 최종 확인 후 직접 전송합니다. 별도 사진 도우미와 Meta Business Suite 보조 도우미도 유지합니다.
 
 YouTube 조회에는 기존 `YOUTUBE_API_KEY`만 재사용합니다. 키 값은 모델·채팅·로그로 전달하지 않습니다. 새로운 YouTube 업로드 OAuth 권한·갱신 토큰은 이 흐름에서 생성하지 않습니다. 조회 준비 여부만 인증된 상태 API에 노출합니다.
 
@@ -50,7 +50,7 @@ YouTube 조회에는 기존 `YOUTUBE_API_KEY`만 재사용합니다. 키 값은 
 | Facebook | 스파이미디어 Page `1387247911137772`, feed 링크 소개 | `FB_PAGE_ACCESS_TOKEN`, `FB_PUBLISH_ENABLED=true`, 앱에서 확인한 `META_GRAPH_VERSION`; 매 전송 전 Page ID 확인 |
 | X | `spymedia_kor`, text 소개 + YouTube 주소 | 기존 OAuth 1.0a 네 개 키 또는 OAuth 2.0 사용자 인증; `X_PUBLISH_ENABLED=true`, 비용 확인값 `X_COST_LIMIT_ACKNOWLEDGED=true`는 실제 상한이 아님; [X 설정 안내](X-OPERATIONS.md) |
 | 블로그 | `blog.naver.com/spymedia`, 원고·사진 준비 | 사용자 최종 게시; 브라우저 매크로와 API 글쓰기 없음 |
-| Instagram | `spymedia_kr`, 기본은 Meta Business Suite 직접 게시 + 별도 JPEG 사진 도우미 | 문구 복사·Meta 열기는 기존 Meta 로그인 사용. 접힌 관리자 전송 기능만 기존 Instagram Login·서명 HTTPS 전달·영구 저장소를 재사용, [Instagram 안내](INSTAGRAM-OPERATIONS.md) |
+| Instagram | `spymedia_kr`, 메인 사진/원본 릴스 직접 게시 + Meta 보조 도우미 | 기존 Instagram Login·서명 HTTPS 전달·영구 저장소 재사용, 계정 및 게시 권한 확인 후 최종 전송, [Instagram 안내](INSTAGRAM-OPERATIONS.md) |
 
 Facebook 권한은 기존 `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`와 Page 콘텐츠 접근을 확인합니다. 개인 프로필 `100069643772419`는 대상이 아닙니다. 필요성이 확인되지 않은 `business_management` 권한을 추가하지 않습니다. 링크 소개에는 미디어 서명 키와 영상 업로드 URL이 필요하지 않습니다. 기존 `MEDIA_SIGNING_KEY`와 이전 미디어 접근 경로는 변경하지 않습니다.
 

@@ -5,3 +5,10 @@
 .ig-native-jobs>.primary-button{width:auto;min-height:40px;margin:14px 0 0;padding:10px 18px}.ig-native-jobs .record-select{cursor:pointer}
 .ig-placeholder.ig-native-preview{padding:0;min-height:0;background:#eff4f8}.ig-placeholder.ig-native-preview>span,.ig-placeholder.ig-native-preview>strong,.ig-placeholder.ig-native-preview>p{display:none}.ig-placeholder>img{max-width:100%;max-height:400px;object-fit:contain}.ig-placeholder>img[hidden]{display:none}
 @media(max-width:760px){.ig-native-jobs{padding:18px 16px}.ig-native-jobs>.primary-button{width:100%}.ig-native .facebook-check-row{align-items:flex-start;flex-direction:column}}
+
+#instagram-direct{padding:24px;scroll-margin-top:20px;margin-bottom:24px}
+.instagram-direct-heading{align-items:flex-start}.instagram-direct-heading h2{font-size:18px;margin-top:5px}.instagram-kind{margin:20px 0}.instagram-photo>h3{font-size:15px;margin-bottom:15px}
+.instagram-photo #ig-photo-preview{display:block;width:100%;max-height:300px;object-fit:contain;margin:16px 0;border-radius:6px;background:#071b35}
+.instagram-photo #ig-photo-info{overflow-wrap:anywhere}.instagram-photo #ig-jobs .record-details img{width:100%;max-height:340px;object-fit:contain}
+#instagram-direct>.reels-panel{padding:0}.instagram-suite-helper{margin-bottom:24px;border:1px solid var(--line);border-radius:9px;background:white}.instagram-suite-helper>summary{padding:15px 20px;cursor:pointer;font-size:12px;font-weight:600}.instagram-suite-helper>summary:focus-visible{outline:3px solid #73d7e6;outline-offset:3px}.instagram-suite-helper>.suite-panel{border:0;margin:0;box-shadow:none}
+@media(max-width:760px){#instagram-direct{padding:18px 15px}.instagram-direct-heading{flex-wrap:wrap}.instagram-photo .reels-jobs-heading{flex-wrap:wrap;gap:10px}.instagram-kind{gap:18px}}

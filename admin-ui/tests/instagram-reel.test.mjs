@@ -25,6 +25,7 @@ async function fixture(t,{env={},transport}={}){
     calls.push({method,url,body});assert.equal(token,settings.env.IG_ACCESS_TOKEN);
     if(transport)return transport(method,url,body);
     if(url.includes('?fields=id,user_id,username'))return {data:{id:appScopedId,user_id:userId,username:'spymedia_kr',token:secret}};
+    if(url.endsWith('/content_publishing_limit?fields=quota_usage,config'))return {data:{data:[{quota_usage:2,config:{quota_total:50,quota_duration:86400}}]}};
     if(url.endsWith('/media'))return {data:{id:'reel_container_1'}};
     if(url.includes('?fields=status_code'))return {data:{status_code:'FINISHED'}};
     if(url.endsWith('/media_publish'))return {data:{id:'reel_media_1'}};
@@ -87,12 +88,12 @@ test('explicit reel publication uses verified professional user_id, signed origi
   };
   assert.equal(f.calls.length,0);const result=await send(f,job.id);
   assert.equal(result.status,'succeeded');assert.equal(result.result.mediaProductType,'REELS');assert.equal(result.result.url,'https://www.instagram.com/reel/synthetic_1/');assert.equal(result.canSend,false);assert.equal(result.canRetry,false);
-  assert.deepEqual(f.calls.map(c=>c.method),['GET','POST','GET','GET','POST','GET']);assert.deepEqual(f.pauses,[60000]);
+  assert.deepEqual(f.calls.map(c=>c.method),['GET','GET','POST','GET','GET','POST','GET']);assert.deepEqual(f.pauses,[60000]);
   const created=f.calls.find(c=>c.url.endsWith('/media')),published=f.calls.find(c=>c.url.endsWith('/media_publish')),root='https://graph.instagram.com/'+f.settings.env.META_GRAPH_VERSION+'/'+userId;
   assert.equal(created.url,root+'/media');assert.equal(published.url,root+'/media_publish');assert.equal(created.body.media_type,'REELS');assert.equal(created.body.share_to_feed,true);assert.equal(created.body.caption,caption(draft(media.id)));
   assert.deepEqual(Object.keys(created.body).sort(),['caption','media_type','share_to_feed','video_url']);assert.equal(f.service.validSignature(new URL(created.body.video_url)),true);assert.match(new URL(created.body.video_url).pathname,new RegExp(media.id+'$'));assert.ok(f.calls.every(c=>!c.url.includes('/'+appScopedId)));
   assert.match(f.calls.at(-1).url,/fields=id,permalink,media_product_type$/);assert.equal(f.conversions(),0);assert.deepEqual(await fs.readFile(f.store.file(media.id)),original);
-  assert.equal((await f.service.jobs.create(draft(media.id)))[0].id,job.id);await assert.rejects(f.service.jobs.start([job.id]),e=>e.code==='job_not_ready');assert.equal(f.calls.length,6);
+  assert.equal((await f.service.jobs.create(draft(media.id)))[0].id,job.id);await assert.rejects(f.service.jobs.start([job.id]),e=>e.code==='job_not_ready');assert.equal(f.calls.length,7);
 });
 
 test('reel publication rejects mismatched or malformed identity before any container write',async t=>{
@@ -100,6 +101,16 @@ test('reel publication rejects mismatched or malformed identity before any conta
     const f=await fixture(t,{transport:async()=>({data:identity})}),{job}=await prepared(f),result=await send(f,job.id);
     assert.equal(result.status,'failed');assert.equal(result.canRetry,true);assert.equal(result.errorDetails.phase,'instagram_identity');assert.ok(f.calls.every(c=>c.method==='GET'));assert.equal(f.conversions(),0);
   }
+});
+test('an earlier successful permissions check does not bypass an exhausted quota at reel transmission',async t=>{
+  const f=await fixture(t),{job}=await prepared(f),originalRequest=f.connector.request;
+  assert.equal((await f.service.checkInstagramConnection()).publishingPermissionsVerified,true);
+  f.connector.request=async(method,url,token,body)=>{
+    const response=await originalRequest(method,url,token,body);
+    if(url.includes('/content_publishing_limit?'))response.data={data:[{quota_usage:3,config:{quota_total:3,quota_duration:86400}}]};
+    return response;
+  };
+  const result=await send(f,job.id);assert.equal(result.status,'failed');assert.equal(result.error,'instagram_publish_limit');assert.equal(result.errorDetails.phase,'instagram_permissions');assert.equal(result.canRetry,true);assert.equal(f.calls.length,4);assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.conversions(),0);assert.equal(result.result,null);
 });
 
 test('persisted reel assets must still be verified originals before a container can be sent',async t=>{
@@ -129,10 +140,10 @@ test('container processing errors and timeout never publish or start legacy conv
 });
 
 test('permission failures before publication may be explicitly retried; publication and verification uncertainty never replay',async t=>{
-  for(const phase of ['instagram_identity','instagram_reel_create','instagram_reel_prepare','instagram_reel_publish','instagram_reel_verify']){
+  for(const phase of ['instagram_identity','instagram_permissions','instagram_reel_create','instagram_reel_prepare','instagram_reel_publish','instagram_reel_verify']){
     const f=await fixture(t),{media,job}=await prepared(f),originalRequest=f.connector.request;
     f.connector.request=async(method,url,token,body)=>{
-      const matched=phase==='instagram_identity'?url.includes('fields=id,user_id,username'):phase==='instagram_reel_create'?url.endsWith('/media'):phase==='instagram_reel_prepare'?url.includes('fields=status_code'):phase==='instagram_reel_publish'?url.endsWith('/media_publish'):url.includes('fields=id,permalink,media_product_type');
+      const matched=phase==='instagram_identity'?url.includes('fields=id,user_id,username'):phase==='instagram_permissions'?url.includes('/content_publishing_limit?'):phase==='instagram_reel_create'?url.endsWith('/media'):phase==='instagram_reel_prepare'?url.includes('fields=status_code'):phase==='instagram_reel_publish'?url.endsWith('/media_publish'):url.includes('fields=id,permalink,media_product_type');
       if(matched)throw Object.assign(Error(secret),{status:409,code:'channel_auth_or_permission',providerDetails:{httpStatus:403,providerCode:200,message:secret,token:secret}});return originalRequest(method,url,token,body);
     };
     const result=await send(f,job.id),uncertain=['instagram_reel_publish','instagram_reel_verify'].includes(phase);
@@ -174,6 +185,10 @@ test('original signed reel delivery returns identical bytes, range and HEAD resp
   await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));f.settings.origin='http://127.0.0.1:'+server.address().port;
   const url=f.service.signedUrl(f.store.state.jobs[job.id].assets[0]),response=await fetch(url);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'video/mp4');assert.deepEqual(Buffer.from(await response.arrayBuffer()),original);
   const range=await fetch(url,{headers:{Range:'bytes=3-8'}});assert.equal(range.status,206);assert.deepEqual(Buffer.from(await range.arrayBuffer()),original.subarray(3,9));assert.equal((await fetch(url,{method:'HEAD'})).headers.get('content-length'),String(original.length));
+  const oversized=await fetch(url,{headers:{Range:'bytes=0-1048575'}});assert.equal(oversized.status,206);assert.equal(oversized.headers.get('content-range'),`bytes 0-${original.length-1}/${original.length}`);assert.deepEqual(Buffer.from(await oversized.arrayBuffer()),original);
+  const suffix=await fetch(url,{headers:{Range:'bytes=-4'}});assert.equal(suffix.status,206);assert.deepEqual(Buffer.from(await suffix.arrayBuffer()),original.subarray(-4));
+  const openEnded=await fetch(url,{headers:{Range:'bytes=3-'}});assert.equal(openEnded.status,206);assert.deepEqual(Buffer.from(await openEnded.arrayBuffer()),original.subarray(3));
+  for(const invalid of ['bytes=-0',`bytes=${original.length}-`,'bytes=8-3','bytes=0-1,3-4','bytes=9007199254740993-'])assert.equal((await fetch(url,{headers:{Range:invalid}})).status,416);
   assert.equal((await fetch(url.replace('signature=','signature=0'))).status,403);assert.deepEqual(await fs.readFile(f.store.file(media.id)),original);assert.equal(f.conversions(),0);
 });
 

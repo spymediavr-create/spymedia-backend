@@ -30,7 +30,9 @@ class Service {
     try{
       const result=await this.connectors.checkInstagramConnection();
       if(result?.identityVerified!==true||result.username!=='spymedia_kr'||typeof result.userId!=='string'||!/^\d{1,30}$/.test(result.userId))throw error(409,'account_mismatch');
-      return {userId:result.userId,username:'spymedia_kr',identityVerified:true,publishingPermissionsVerified:false,mediaDeliveryConfigured:result.mediaDeliveryConfigured===true,publishingEnabled:result.publishingEnabled===true};
+      const quota=result.publishingQuota;
+      const permissions=result.publishingPermissionsVerified===true&&result.permissionCheckMethod==='content_publishing_limit'&&Number.isSafeInteger(quota?.used)&&quota.used>=0&&Number.isSafeInteger(quota?.total)&&quota.total>0&&Number.isSafeInteger(quota?.durationSeconds)&&quota.durationSeconds>0;
+      return {userId:result.userId,username:'spymedia_kr',identityVerified:true,publishingPermissionsVerified:permissions,publicationVerified:false,...(permissions?{permissionCheckMethod:'content_publishing_limit',publishingQuota:{used:quota.used,total:quota.total,durationSeconds:quota.durationSeconds,remaining:Math.max(0,quota.total-quota.used)},publishingQuotaAvailable:quota.used<quota.total}:{}),mediaDeliveryConfigured:result.mediaDeliveryConfigured===true,publishingEnabled:result.publishingEnabled===true};
     }finally{this.instagramCheckBusy=false;}
   }
   async checkFacebookConnection(){
@@ -77,7 +79,13 @@ class Service {
     let item=converted?Object.values(this.store.state.jobs).flatMap(j=>j.assets).find(a=>a.id===id):this.store.state.media[id];
     if(!item)throw error(404,'not_found');const file=this.store.file(id,converted&&!item.original);const stat=await fsp.stat(file);
     let start=0,end=stat.size-1,status=200;const range=req.headers.range;
-    if(range){const match=/^bytes=(\d+)-(\d*)$/.exec(range);if(!match)throw error(416,'invalid_range');start=Number(match[1]);end=match[2]?Number(match[2]):end;if(start>end||end>=stat.size)throw error(416,'invalid_range');status=206;}
+    if(range){
+      const match=/^bytes=(\d*)-(\d*)$/.exec(range);
+      if(!match||!match[1]&&!match[2]||!stat.size)throw error(416,'invalid_range');
+      if(!match[1]){const suffix=Number(match[2]);if(!Number.isSafeInteger(suffix)||suffix<=0)throw error(416,'invalid_range');start=Math.max(0,stat.size-suffix);}
+      else {start=Number(match[1]);const requestedEnd=match[2]?Number(match[2]):end;if(!Number.isSafeInteger(start)||!Number.isSafeInteger(requestedEnd)||start>requestedEnd||start>=stat.size)throw error(416,'invalid_range');end=Math.min(requestedEnd,end);}
+      status=206;
+    }
     const extension={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','video/mp4':'mp4','video/webm':'webm','video/quicktime':'mov'}[item.type];
     res.writeHead(status,{'Content-Type':item.type,'Content-Length':end-start+1,'Accept-Ranges':'bytes','Content-Disposition':converted||url.searchParams.get('preview')==='1'?'inline':`attachment; filename="original.${extension}"; filename*=UTF-8''${encodeURIComponent(item.name)}`,...(status===206?{'Content-Range':`bytes ${start}-${end}/${stat.size}`}:{})});
     if(req.method==='HEAD'){res.end();return;}

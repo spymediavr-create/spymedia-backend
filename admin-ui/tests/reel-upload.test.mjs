@@ -237,5 +237,5 @@ test('signed original reel delivery returns exact bytes, Content-Type and bounde
   const response=await req(route);assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'video/mp4');assert.deepEqual(Buffer.from(await response.arrayBuffer()),bytes);
   const range=await req(route,{headers:{Range:'bytes=8-19'}});assert.equal(range.status,206);assert.equal(range.headers.get('content-range'),`bytes 8-19/${bytes.length}`);assert.deepEqual(Buffer.from(await range.arrayBuffer()),bytes.subarray(8,20));
   const head=await req(route,{method:'HEAD'});assert.equal(head.headers.get('content-length'),String(bytes.length));assert.equal((await head.arrayBuffer()).byteLength,0);
-  assert.equal((await req(route,{headers:{Range:`bytes=0-${bytes.length}`}})).status,416);assert.equal((await req(route.replace('signature=','signature=0'))).status,403);assert.equal((await req('/api/admin/media/'+saved.id)).status,401);assert.equal(f.calls.length,1);
+  const beyondEnd=await req(route,{headers:{Range:`bytes=0-${bytes.length}`}});assert.equal(beyondEnd.status,206);assert.deepEqual(Buffer.from(await beyondEnd.arrayBuffer()),bytes);assert.equal((await req(route.replace('signature=','signature=0'))).status,403);assert.equal((await req('/api/admin/media/'+saved.id)).status,401);assert.equal(f.calls.length,1);
 });

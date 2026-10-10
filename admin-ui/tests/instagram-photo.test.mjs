@@ -25,6 +25,7 @@ async function fixture(t,env={},transport){
     calls.push({method,url,body});assert.equal(token,settings.env.IG_ACCESS_TOKEN);
     if(transport)return transport(method,url,body);
     if(url.includes('?fields=id,user_id,username'))return {data:{id:appScopedId,user_id:userId,username:'spymedia_kr',token:secret}};
+    if(url.endsWith('/content_publishing_limit?fields=quota_usage,config'))return {data:{data:[{quota_usage:2,config:{quota_total:50,quota_duration:86400},token:secret}],token:secret}};
     if(url.endsWith('/media'))return {data:{id:'container_1'}};
     if(url.includes('?fields=status_code'))return {data:{status_code:'FINISHED'}};
     if(url.endsWith('/media_publish'))return {data:{id:'media_1'}};
@@ -50,8 +51,9 @@ async function apiFixture(t,f){
 test('Instagram status reports only configuration booleans; read-only identity works with posting and delivery disabled',async t=>{
   const f=await fixture(t,{SNS_PUBLISH_ENABLED:'false',IG_PUBLISH_ENABLED:'false',PUBLIC_ORIGIN:'',MEDIA_SIGNING_KEY:''});
   const status=await f.service.status();assert.equal(f.calls.length,0);assert.equal(status.instagramConnection.credentialsConfigured,true);assert.equal(status.instagramConnection.mediaDeliveryConfigured,false);assert.equal(status.instagramConnection.publishingEnabled,false);
-  const checked=await f.service.checkInstagramConnection();assert.equal(checked.username,'spymedia_kr');assert.equal(checked.publishingPermissionsVerified,false);assert.equal(checked.publishingEnabled,false);assert.equal(f.calls.length,1);assert.equal(f.calls[0].method,'GET');assert.equal(JSON.stringify(checked).includes(secret),false);
-  f.settings.env.IG_ACCESS_TOKEN='';await assert.rejects(f.connector.checkInstagramConnection(),e=>e.code==='instagram_not_configured');assert.equal(f.calls.length,1);
+  const checked=await f.service.checkInstagramConnection();assert.equal(checked.username,'spymedia_kr');assert.equal(checked.publishingPermissionsVerified,true);assert.equal(checked.publicationVerified,false);assert.equal(checked.permissionCheckMethod,'content_publishing_limit');assert.deepEqual(checked.publishingQuota,{used:2,total:50,durationSeconds:86400,remaining:48});assert.equal(checked.publishingQuotaAvailable,true);assert.equal(checked.publishingEnabled,false);assert.equal(f.calls.length,2);assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(JSON.stringify(checked).includes(secret),false);
+  assert.equal(f.calls[1].url,'https://graph.instagram.com/'+f.settings.env.META_GRAPH_VERSION+'/'+userId+'/content_publishing_limit?fields=quota_usage,config');
+  f.settings.env.IG_ACCESS_TOKEN='';await assert.rejects(f.connector.checkInstagramConnection(),e=>e.code==='instagram_not_configured');assert.equal(f.calls.length,2);
 });
 test('wrong Instagram account and malformed identity cause zero container or publish writes',async t=>{
   const valid={id:appScopedId,user_id:userId,username:'spymedia_kr'};
@@ -60,6 +62,36 @@ test('wrong Instagram account and malformed identity cause zero container or pub
     const f=await fixture(t,{},async()=>({data:identity})),photo=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(photo.id));
     await f.service.jobs.start([job.id]);await f.service.jobs.tail;
     const result=(await f.service.jobs.list())[0];assert.equal(result.status,'failed');assert.equal(result.canRetry,true);assert.equal(result.errorDetails.phase,'instagram_identity');assert.ok(f.calls.every(c=>c.method==='GET'));
+  }
+});
+test('publishing quota uses the provider limit, reports exhaustion separately from permissions and blocks every photo write',async t=>{
+  for(const [used,total] of [[7,7],[8,7]]){
+    const f=await fixture(t,{},async(method,url)=>{
+      if(url.includes('fields=id,user_id,username'))return {data:{id:appScopedId,user_id:userId,username:'spymedia_kr'}};
+      if(url.endsWith('/content_publishing_limit?fields=quota_usage,config'))return {data:{data:[{quota_usage:used,config:{quota_total:total,quota_duration:7200},token:secret}]}};
+      assert.fail('An exhausted quota must not send media');
+    });
+    const checked=await f.service.checkInstagramConnection();assert.equal(checked.publishingPermissionsVerified,true);assert.equal(checked.publicationVerified,false);assert.equal(checked.publishingQuotaAvailable,false);assert.deepEqual(checked.publishingQuota,{used,total,durationSeconds:7200,remaining:0});assert.equal(JSON.stringify(checked).includes(secret),false);
+    const media=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(media.id));await f.service.jobs.start([job.id]);await f.service.jobs.tail;
+    const result=(await f.service.jobs.list())[0];assert.equal(result.status,'failed');assert.equal(result.error,'instagram_publish_limit');assert.equal(result.errorDetails.phase,'instagram_permissions');assert.equal(result.canRetry,true);assert.equal(f.calls.length,4);assert.ok(f.calls.every(call=>call.method==='GET'));assert.notEqual(f.store.state.jobs[job.id].publicationAttempted,true);
+  }
+});
+test('permission denial after successful identity makes zero photo writes and exposes only bounded diagnostics',async t=>{
+  const f=await fixture(t),originalRequest=f.connector.request;
+  f.connector.request=async(method,url,token,body)=>url.includes('/content_publishing_limit?')?request(method,url,token,body,{},async()=>({status:403,data:{error:{code:200,type:'OAuthException',message:secret,access_token:secret}}})):originalRequest(method,url,token,body);
+  await assert.rejects(f.service.checkInstagramConnection(),e=>e.code==='channel_auth_or_permission'&&e.phase==='instagram_permissions');
+  const media=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(media.id));await f.service.jobs.start([job.id]);await f.service.jobs.tail;
+  const result=(await f.service.jobs.list())[0];assert.equal(result.status,'failed');assert.equal(result.error,'channel_auth_or_permission');assert.deepEqual(result.errorDetails,{httpStatus:403,providerCode:200,providerType:'OAuthException',phase:'instagram_permissions'});assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(JSON.stringify(result).includes(secret),false);assert.equal(JSON.stringify(f.store.state.jobs).includes(secret),false);
+  const logs=[],saved=console.error;try{console.error=value=>logs.push(value);logJobFailure({id:job.id,channel:'instagram',error:result.error},{...result.errorDetails,message:secret,token:secret});}finally{console.error=saved;}assert.equal(logs.length,1);assert.equal(logs[0].includes(secret),false);
+});
+test('malformed publishing quota never verifies permissions or sends a container',async t=>{
+  const good={quota_usage:0,config:{quota_total:50,quota_duration:86400}};
+  const invalid=[null,{}, {data:null},{data:[]},{data:[good,good]},{data:[null]},...[undefined,null,-1,1.5,'2',Infinity,Number.MAX_SAFE_INTEGER+1].map(quota_usage=>({data:[{...good,quota_usage}]})),...[undefined,null,0,-1,1.5,'50',Infinity,Number.MAX_SAFE_INTEGER+1].map(quota_total=>({data:[{...good,config:{...good.config,quota_total}}]})),...[undefined,null,0,-1,1.5,'86400',Infinity,Number.MAX_SAFE_INTEGER+1].map(quota_duration=>({data:[{...good,config:{...good.config,quota_duration}}]}))];
+  for(const quota of invalid){
+    const f=await fixture(t,{},async(method,url)=>url.includes('fields=id,user_id,username')?{data:{id:appScopedId,user_id:userId,username:'spymedia_kr'}}:{data:quota});
+    await assert.rejects(f.connector.checkInstagramConnection(),e=>e.status===502&&e.code==='invalid_channel_response'&&e.phase==='instagram_permissions');
+    const media=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(media.id));await f.service.jobs.start([job.id]);await f.service.jobs.tail;
+    const result=(await f.service.jobs.list())[0];assert.equal(result.status,'failed');assert.equal(result.error,'invalid_channel_response');assert.equal(result.errorDetails.phase,'instagram_permissions');assert.ok(f.calls.every(call=>call.method==='GET'));assert.equal(f.calls.length,4);
   }
 });
 test('Instagram mismatch diagnosis binds only professional user_id and username without exposing values or falling back to app-scoped id',async t=>{
@@ -99,8 +131,8 @@ test('protected Instagram check accepts a distinct app-scoped id only with the c
   const f=await fixture(t),{req,headers}=await apiFixture(t,f);
   const response=await req('/api/admin/instagram/check',{method:'POST',headers,body:'{}'});assert.equal(response.status,200);
   const text=await response.text(),result=JSON.parse(text).connection;
-  assert.equal(result.userId,userId);assert.equal(result.username,'spymedia_kr');assert.equal(result.identityVerified,true);assert.equal(result.publishingPermissionsVerified,false);
-  assert.equal(text.includes(appScopedId),false);assert.equal(text.includes(secret),false);assert.equal(f.calls.length,1);assert.equal(f.calls[0].method,'GET');
+  assert.equal(result.userId,userId);assert.equal(result.username,'spymedia_kr');assert.equal(result.identityVerified,true);assert.equal(result.publishingPermissionsVerified,true);assert.equal(result.publicationVerified,false);
+  assert.equal(text.includes(appScopedId),false);assert.equal(text.includes(secret),false);assert.equal(f.calls.length,2);assert.ok(f.calls.every(call=>call.method==='GET'));
 });
 test('photo preparation saves one original, deduplicates across concurrency and restart, and invokes no provider or conversion',async t=>{
   const f=await fixture(t),saved=await f.service.photos.upload(stream());
@@ -122,6 +154,7 @@ test('native photo publish checks identity, waits before one publication, verifi
   let polls=0;
   const f=await fixture(t,{},async(method,url)=>{
     if(url.includes('fields=id,user_id,username'))return {data:{id:appScopedId,user_id:userId,username:'spymedia_kr'}};
+    if(url.endsWith('/content_publishing_limit?fields=quota_usage,config'))return {data:{data:[{quota_usage:0,config:{quota_total:37,quota_duration:86400}}]}};
     if(url.endsWith('/media'))return {data:{id:'container_1'}};
     if(url.includes('fields=status_code'))return {data:{status_code:++polls===1?'IN_PROGRESS':'FINISHED'}};
     if(url.endsWith('/media_publish')){assert.equal(Object.values(f.store.state.jobs)[0].publicationAttempted,true);return {data:{id:'media_1'}};}
@@ -130,17 +163,17 @@ test('native photo publish checks identity, waits before one publication, verifi
   const saved=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(saved.id));assert.equal(f.calls.length,0);
   await f.service.jobs.start([job.id]);await f.service.jobs.tail;
   const result=(await f.service.jobs.list())[0];assert.equal(result.status,'succeeded');assert.equal(result.result.url,'https://www.instagram.com/p/synthetic_1/');assert.equal(result.canSend,false);
-  assert.deepEqual(f.calls.map(c=>c.method),['GET','POST','GET','GET','POST','GET']);assert.deepEqual(f.pauses,[2000]);
+  assert.deepEqual(f.calls.map(c=>c.method),['GET','GET','POST','GET','GET','POST','GET']);assert.deepEqual(f.pauses,[2000]);
   const created=f.calls.find(c=>c.url.endsWith('/media'));assert.deepEqual(Object.keys(created.body).sort(),['caption','image_url']);assert.equal(created.body.caption,caption(draft(saved.id)));assert.equal(f.service.validSignature(new URL(created.body.image_url)),true);
   const published=f.calls.find(c=>c.url.endsWith('/media_publish')),root='https://graph.instagram.com/'+f.settings.env.META_GRAPH_VERSION+'/'+userId;
   assert.equal(created.url,root+'/media');assert.equal(published.url,root+'/media_publish');assert.ok(f.calls.every(c=>!c.url.includes('/'+appScopedId)));assert.equal(f.settings.env.IG_USER_ID,userId);
-  assert.equal((await f.service.jobs.create(draft(saved.id)))[0].id,job.id);await assert.rejects(f.service.jobs.start([job.id]),e=>e.code==='job_not_ready');assert.equal(f.calls.length,6);
+  assert.equal((await f.service.jobs.create(draft(saved.id)))[0].id,job.id);await assert.rejects(f.service.jobs.start([job.id]),e=>e.code==='job_not_ready');assert.equal(f.calls.length,7);
 });
 test('permission failures before publication allow explicit preparation; uncertain publication and verification never replay',async t=>{
-  for(const phase of ['instagram_identity','instagram_photo_create','instagram_photo_publish','instagram_photo_verify']){
+  for(const phase of ['instagram_identity','instagram_permissions','instagram_photo_create','instagram_photo_publish','instagram_photo_verify']){
     const f=await fixture(t),saved=await f.service.photos.upload(stream()),[job]=await f.service.jobs.create(draft(saved.id));
     const original=f.connector.request;f.connector.request=async(method,url,token,body)=>{
-      const matched=phase==='instagram_identity'?url.includes('fields=id,user_id,username'):phase==='instagram_photo_create'?url.endsWith('/media'):phase==='instagram_photo_publish'?url.endsWith('/media_publish'):url.includes('fields=id,permalink');
+      const matched=phase==='instagram_identity'?url.includes('fields=id,user_id,username'):phase==='instagram_permissions'?url.includes('/content_publishing_limit?'):phase==='instagram_photo_create'?url.endsWith('/media'):phase==='instagram_photo_publish'?url.endsWith('/media_publish'):url.includes('fields=id,permalink');
       if(matched)throw Object.assign(Error(secret),{status:409,code:'channel_auth_or_permission',providerDetails:{httpStatus:403,providerCode:200,message:secret,token:secret}});return original(method,url,token,body);
     };
     await f.service.jobs.start([job.id]);await f.service.jobs.tail;
@@ -167,6 +200,14 @@ test('shared Instagram diagnosis blocks overlap after cooldown and counts failur
   const pending=f.service.checkInstagramConnection();await assert.rejects(f.service.checkInstagramConnection(),e=>e.code==='instagram_check_rate_limited'&&e.retryAfter===60);now+=60000;await assert.rejects(f.service.checkInstagramConnection(),e=>e.code==='instagram_check_rate_limited');release();assert.equal(JSON.stringify(await pending).includes(secret),false);
   f.connector.checkInstagramConnection=async()=>{calls++;throw Object.assign(Error(secret),{status:409,code:'channel_auth_or_permission'});};await assert.rejects(f.service.checkInstagramConnection());await assert.rejects(f.service.checkInstagramConnection(),e=>e.code==='instagram_check_rate_limited');assert.equal(calls,2);
 });
+test('service permissions require the known method and valid quota and never forward raw provider data',async t=>{
+  const f=await fixture(t),base={userId,username:'spymedia_kr',identityVerified:true,publishingPermissionsVerified:true,permissionCheckMethod:'content_publishing_limit',publicationVerified:true,publishingEnabled:true,publishingQuota:{used:4,total:17,durationSeconds:7200,remaining:999999,token:secret},access_token:secret,raw:{token:secret}};
+  for(const patch of [{},{permissionCheckMethod:'unverified'},{publishingQuota:null},{publishingQuota:{used:0,total:'17',durationSeconds:7200}},{publishingPermissionsVerified:false}]){
+    f.service.instagramCheckNextAt=0;f.connector.checkInstagramConnection=async()=>({...base,...patch});
+    const checked=await f.service.checkInstagramConnection();assert.equal(checked.publishingPermissionsVerified,Object.keys(patch).length===0);assert.equal(checked.publicationVerified,false);assert.equal(JSON.stringify(checked).includes(secret),false);
+    if(checked.publishingPermissionsVerified)assert.deepEqual(checked.publishingQuota,{used:4,total:17,durationSeconds:7200,remaining:13});else assert.equal(checked.publishingQuota,undefined);
+  }
+});
 test('Instagram connection route requires login, Origin, CSRF and empty JSON; expired provider auth keeps the admin session',async t=>{
   const f=await fixture(t),{req,headers}=await apiFixture(t,f),route='/api/admin/instagram/check';
   assert.equal((await req(route,{method:'POST'})).status,401);const publicStatus=await(await req('/api/admin/status')).json();assert.equal(publicStatus.instagramConnection,undefined);
@@ -174,7 +215,7 @@ test('Instagram connection route requires login, Origin, CSRF and empty JSON; ex
   assert.equal((await req(route,{headers})).status,404);
   for(const body of ['null','[]',JSON.stringify({token:secret})])assert.equal((await req(route,{method:'POST',headers,body})).status,400);
   assert.equal((await req(route+'?token='+secret,{method:'POST',headers,body:'{}'})).status,400);assert.equal(f.calls.length,0);
-  assert.equal((await req(route,{method:'POST',headers,body:'{}'})).status,200);assert.equal(f.calls.length,1);
+  assert.equal((await req(route,{method:'POST',headers,body:'{}'})).status,200);assert.equal(f.calls.length,2);
   const limited=await req(route,{method:'POST',headers,body:'{}'});assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'60');
   f.service.instagramCheckNextAt=0;f.connector.request=async(method,url,token,body)=>request(method,url,token,body,{},async()=>({status:401,data:{error:{code:190,type:'OAuthException',message:secret}}}));
   const failed=await req(route,{method:'POST',headers,body:'{}'});assert.equal(failed.status,409);const text=await failed.text();assert.equal(text.includes(secret),false);assert.equal(JSON.parse(text).details.phase,'instagram_identity');assert.equal((await(await req('/api/admin/status',{headers})).json()).authenticated,true);

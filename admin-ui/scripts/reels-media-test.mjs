@@ -28,7 +28,7 @@ try{
   await context.route('**/*',route=>{const u=route.request().url();return u.startsWith('blob:')||u.startsWith('data:')||new URL(u).origin===origin?route.continue():route.abort();});
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.goto(origin+'/admin/login');await page.locator('#login-id').fill('synthetic');await page.locator('#login-password').fill(password);await page.locator('#login-submit').click();await page.waitForURL(origin+'/admin');
-  assert.equal(await page.locator('#instagram-direct').evaluate(details=>details.open),false);await page.locator('#instagram-direct > summary').click();
+  assert.equal(await page.locator('#instagram-direct').isVisible(),true);assert.equal(await page.locator('[name=ig-kind][value=photo]').isChecked(),true);assert.equal(await page.locator('#instagram-reels').isHidden(),true);await page.locator('[name=ig-kind][value=reel]').check();assert.equal(await page.locator('#instagram-reels').isVisible(),true);
   await page.locator('#reels-file').setInputFiles(input);
   await page.waitForFunction(()=>!document.querySelector('#reels-upload').disabled);
   await page.locator('#reels-preview').evaluate(async video=>{video.muted=true;await video.play();});

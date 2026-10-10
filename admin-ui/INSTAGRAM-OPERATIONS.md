@@ -1,16 +1,16 @@
-# Instagram Meta Business Suite 준비와 기존 전송 기능
+# Instagram 사진·릴스 직접 게시
 
-## 메인 관리자 기본 흐름: Meta Business Suite
+## 메인 관리자 기본 흐름: 공식 게시 API
 
-`/admin`의 기본 Instagram 영역은 공통 제목·설명·해시태그를 조합한 문구 미리보기, 문구 복사, **Meta Business Suite 열기**를 제공한다. 이 흐름에서는 관리자 서버로 영상 파일을 올리거나 검사·변환하지 않는다. 문구를 복사한 후 Meta 새 창에서 게시 대상 `spymedia_kr`와 릴스를 선택하고, 컴퓨터의 원본 영상 선택·문구 붙여넣기·최종 게시 또는 예약을 직접 진행한다. Meta가 파일을 수락하는지와 게시 결과는 Meta 화면에서 확인한다.
+`/admin`의 기본 Instagram 영역에서 **사진 / 릴스**를 선택하고, 공통 제목·설명·해시태그와 미리보기를 확인한 뒤 원본을 저장한다. 계정·게시 권한을 확인하고 저장된 작업의 파일·문구를 최종 확인해야 직접 전송된다. Instagram 카드와 채널 미리보기는 이 영역으로 이동하며 Facebook·X 링크 전송 선택에 Instagram을 섞지 않는다. 사진과 릴스는 기존 인증·저장·게시 코드를 재사용한다.
 
-연결 주소는 기존 Facebook Page `1387247911137772`를 사용하는 `https://business.facebook.com/latest/home?asset_id=1387247911137772`이다. 링크에는 파일·문구·토큰을 넣지 않는다. 작성 폼을 iframe으로 복제하지 않으며 파일 자동 전달, Meta 입력란 자동 채우기, 브라우저 매크로, 게시 결과 자동 동기화를 구현하지 않는다. 복사 권한이 거절되면 읽기 전용 문구란을 선택해 수동으로 복사한다. 신규 인증 권한이나 유료 서비스가 필요하지 않다.
+Meta Business Suite 문구 복사·이동 기능은 접힌 보조 도우미로 보존한다. 연결 주소는 기존 Facebook Page `1387247911137772`의 `https://business.facebook.com/latest/home?asset_id=1387247911137772`이며 링크에는 파일·문구·토큰을 넣지 않는다. 별도 사진 도우미 `/admin/instagram`도 같은 사진 게시 모듈을 사용한다. 신규 인증 권한·토큰·유료 서비스는 만들지 않는다.
 
-이전 관리자 릴스 전송 기능과 저장된 결과는 기본 화면 아래의 닫힌 **기존 관리자 전송·작업 이력**에서 계속 접근할 수 있다. 별도 Instagram 사진 도우미와 Facebook·X의 YouTube 링크 소개 기능은 유지한다.
+파일 선택·원본 검사·작업 준비·결과 조회는 Meta에 사진이나 영상을 전송하지 않는다. **선택한 사진/릴스 전송**의 최종 확인 후에만 Meta 컨테이너 생성과 공개 게시를 실행한다. 실제 시험 게시에는 사용할 원본과 문구를 사용자가 먼저 확인해야 한다.
 
-## 기존 관리자 릴스 전송
+## 관리자 릴스 전송
 
-`/admin`의 접힌 기존 전송 영역에서 MP4/MOV 파일을 선택하고 로컬 미리보기 → 영상 검사·저장 → 릴스 작업 준비 → 연결 확인 → 저장된 작업 선택·최종 확인 → 전송·결과 확인 순서로 사용한다. 위 공통 제목·설명·해시태그를 사용하며 YouTube 주소는 필요하지 않다. 전송은 저장된 작업의 원본과 문구를 사용한다. 입력을 나중에 수정해도 기존 작업의 문구는 바뀌지 않는다.
+`/admin`의 Instagram 영역에서 **릴스**를 선택하고 MP4/MOV 로컬 미리보기 → 영상 검사·저장 → 릴스 작업 준비 → 계정·게시 권한 확인 → 저장된 작업 선택·최종 확인 → 전송·결과 확인 순서로 사용한다. 위 공통 제목·설명·해시태그를 사용하며 YouTube 주소는 필요하지 않다. YouTube 시청 링크는 릴스 원본으로 받지 않는다. 전송은 저장된 작업의 원본과 문구를 사용한다. 입력을 나중에 수정해도 기존 작업의 문구는 바뀌지 않는다.
 
 `POST /api/admin/reels`는 기존 관리자 인증·Origin·CSRF 검사 후 raw 파일을 스트리밍 저장한다. 용량 상한은 **앱 기준 300,000,000바이트**이다. 파일 전체를 메모리에 올리지 않고 SHA-256과 ISO BMFF 구조를 검사한 다음 FFprobe 메타데이터만 읽는다. FFmpeg·디코딩 프레임 출력·리사이즈·재인코딩은 실행하지 않는다. 실패 또는 취소 시 임시 파일을 제거한다. 사진과 릴스 업로드는 하나의 잠금으로 디스크 용량을 보호한다.
 
@@ -33,7 +33,7 @@ FFprobe는 기존 `FFPROBE_PATH` 또는 `ffprobe`를 사용한다. 도구가 없
 
 ## 기존 사진 기능
 
-관리자 `/admin/instagram`에서 기존 제목·설명·해시태그를 사용해 JPEG 사진 1장을 저장하고, 준비 목록에서 사진과 저장된 문구를 확인한 뒤 명시적으로 전송한다. 기존 Instagram 메인 카드·미리보기 탭과 Business Suite 준비 도우미를 유지한다. 이 사진 기능의 형식과 전송 방식은 유지한다.
+메인 `/admin`의 **사진** 또는 별도 `/admin/instagram`에서 JPEG 사진 1장을 저장하고 준비 목록의 사진과 저장된 문구를 확인한 뒤 명시적으로 전송한다. 메인은 공통 제목·설명·해시태그를 사용하고 별도 도우미는 자체 문구 입력을 유지한다. 같은 `attachInstagramPhoto` 모듈과 기존 사진 게시 코드를 재사용한다.
 
 ## 이번 구현의 제한
 
@@ -48,16 +48,18 @@ Meta 공식 참고: [Content Publishing](https://developers.facebook.com/documen
 
 서버는 기존 `META_GRAPH_VERSION`, `IG_USER_ID`, `IG_ACCESS_TOKEN`을 사용한다. 사진 전달에는 기존 `PUBLIC_ORIGIN`, `MEDIA_SIGNING_KEY`, 영구 사진 저장 공간 설정이 필요하다. 전송에는 `SNS_PUBLISH_ENABLED=true`와 `IG_PUBLISH_ENABLED=true`도 필요하다. 이 수정안은 운영 환경변수를 변경하지 않는다. Facebook과 X의 현재 활성화 설정도 유지한다.
 
-로그인한 관리자에게 인증·사진 전달·전송 설정의 존재 여부만 보여 준다. 인증정보 값은 클라이언트에 전달하지 않는다. 계정 확인은 `fields=id,user_id,username`을 요청하고, 두 ID가 숫자 문자열인지 검증한 뒤 프로페셔널 계정 ID인 `user_id`가 기존 `IG_USER_ID`와 일치하고 계정명이 `spymedia_kr`인지 확인한다. 앱 범위 `id`로 대신 통과시키지 않는다. 성공 반환값과 미디어 등록·게시 대상은 검증된 `user_id`로 통일한다. 계정 확인 성공은 기존 토큰으로 이 계정을 조회했다는 뜻이다. `publishingPermissionsVerified`는 항상 false이며 게시 권한·앱 심사·운영 토큰 갱신 완료를 의미하지 않는다.
+로그인한 관리자에게 인증·사진 전달·전송 설정의 존재 여부만 보여 준다. 인증정보 값은 클라이언트에 전달하지 않는다. 계정 확인은 `fields=id,user_id,username`을 요청하고, 두 ID가 숫자 문자열인지 검증한 뒤 프로페셔널 계정 ID인 `user_id`가 기존 `IG_USER_ID`와 일치하고 계정명이 `spymedia_kr`인지 확인한다. 앱 범위 `id`로 대신 통과시키지 않는다. 성공 반환값과 미디어 등록·게시 대상은 검증된 `user_id`로 통일한다.
+
+그 다음 같은 Instagram Login 토큰과 `graph.instagram.com` 호스트로 `GET /{검증된 user_id}/content_publishing_limit?fields=quota_usage,config`를 요청한다. [Meta 공식 게시 한도 API](https://developers.facebook.com/documentation/instagram-platform/instagram-graph-api/reference/ig-user/content_publishing_limit)는 `instagram_business_basic`과 `instagram_business_content_publish`를 요구한다. 정수 사용량·한도·기간 응답까지 확인되면 `publishingPermissionsVerified:true`와 `permissionCheckMethod:content_publishing_limit`를 반환한다. 한도는 API 응답으로 계산하며 소진 시 화면과 서버에서 전송을 차단한다. 이 읽기 전용 접근 성공은 실제 공개 게시, 앱 전체 심사, 토큰 갱신 완료의 증명이 아니므로 `publicationVerified:false`를 함께 반환한다. 실제 게시 직전에도 계정과 권한·한도를 새로 조회한다.
 
 Instagram Login 앱 ID는 **1030189823411067**이다. 사용자가 확인한 기존 권한은 `instagram_business_basic`, `instagram_business_content_publish`이다. Business Suite의 게시 대상 확인은 이 앱의 API 인증을 검증하지 않는다.
 
 ## 전송과 복구
 
-1. 로그인 후 **계정 확인**으로 `spymedia_kr`를 확인한다. 서버 전체에 걸쳐 1분 제한을 적용한다. 확인 실패나 다른 계정은 전송을 차단한다.
+1. 로그인 후 **계정·게시 권한 확인**으로 `spymedia_kr`와 게시 권한·한도를 확인한다. 서버 전체에 걸쳐 1분 제한을 적용한다. 확인 실패, 다른 계정, 한도 소진은 전송을 차단한다.
 2. 사진과 문구를 입력하고 **사진·문구 준비**를 누른다. 사진 저장과 작업 준비는 SNS 게시 요청을 보내지 않는다. 같은 사진 바이트와 같은 문구는 기존 작업을 재사용한다.
 3. 준비 목록의 사진·문구를 확인하고 **선택한 사진 전송**을 누른다. 최종 확인 창은 저장된 파일명·크기·계정·문구를 표시한다. 입력란의 저장하지 않은 수정은 이전 작업을 변경하지 않는다.
-4. 서버는 계정을 다시 확인하고 컨테이너 생성 → 처리 확인 → 게시 시도 기록 저장 → 게시 → 결과 ID 확인 순서로 진행한다. 사진 전달은 기존 서명 URL을 사용한다.
+4. 서버는 계정과 게시 권한·한도를 다시 확인하고 컨테이너 생성 → 처리 확인 → 게시 시도 기록 저장 → 게시 → 결과 ID 확인 순서로 진행한다. 사진 전달은 기존 서명 URL을 사용한다. 원본 전달은 HEAD, 일반·끝 생략·suffix Range와 파일 끝을 넘는 범위의 정상 축소 응답을 지원한다.
 5. 게시 전 실패는 **다시 준비**할 수 있지만 이 동작은 전송하지 않는다. 게시 시도 후 오류·응답 불확실·재시작은 `확인 필요`로 보존하며 재전송을 차단한다. 먼저 Instagram에서 게시 여부를 확인한다. 성공·불확실 작업의 중복 키는 재시작과 휴지통 복원 후에도 유지된다.
 
 ## 로컬 검증과 다음 단계

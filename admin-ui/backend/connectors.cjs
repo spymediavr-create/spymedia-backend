@@ -46,7 +46,19 @@ class Connectors {
       return {userId:identity.user_id,username:TARGETS.instagram,identityVerified:true};
     }catch(e){e.phase='instagram_identity';throw e;}
   }
-  async checkInstagramConnection(){return {...await this.instagramIdentity(),...this.describeInstagramConnection()};}
+  async instagramPermissions(userId){
+    try{
+      if(userId!==this.env.IG_USER_ID||!/^\d{1,30}$/.test(userId))throw error(409,'account_mismatch');
+      // This read-only Instagram Login endpoint requires both business_basic and
+      // business_content_publish. It verifies access, never an actual publication.
+      const response=(await this.request('GET','https://graph.instagram.com/'+this.env.META_GRAPH_VERSION+'/'+userId+'/content_publishing_limit?fields=quota_usage,config',this.env.IG_ACCESS_TOKEN)).data;
+      const entries=response?.data,quota=Array.isArray(entries)&&entries.length===1?entries[0]:null;
+      const used=quota?.quota_usage,total=quota?.config?.quota_total,durationSeconds=quota?.config?.quota_duration;
+      if(!Number.isSafeInteger(used)||used<0||!Number.isSafeInteger(total)||total<=0||!Number.isSafeInteger(durationSeconds)||durationSeconds<=0)throw error(502,'invalid_channel_response');
+      return {publishingPermissionsVerified:true,permissionCheckMethod:'content_publishing_limit',publicationVerified:false,publishingQuota:{used,total,durationSeconds,remaining:Math.max(0,total-used)},publishingQuotaAvailable:used<total};
+    }catch(e){e.phase='instagram_permissions';throw e;}
+  }
+  async checkInstagramConnection(){const identity=await this.instagramIdentity();return {...this.describeInstagramConnection(),...identity,...await this.instagramPermissions(identity.userId)};}
   async facebookIdentity(){
     const root='https://graph.facebook.com/'+this.env.META_GRAPH_VERSION;
     try{
@@ -83,6 +95,10 @@ class Connectors {
   async instagram(job,ctx) {
     const root='https://graph.instagram.com/'+this.env.META_GRAPH_VERSION;const token=this.env.IG_ACCESS_TOKEN;
     const {userId:id}=await this.instagramIdentity();
+    if(job.type==='instagram-photo'||job.type==='instagram-reel'){
+      const permission=await this.instagramPermissions(id);
+      if(!permission.publishingQuotaAvailable)throw Object.assign(error(409,'instagram_publish_limit'),{phase:'instagram_permissions'});
+    }
     const call=async(method,route,body)=>this.request(method,root+'/'+route,token,body);
     if(job.type==='instagram-photo'){
       if(job.assets.length!==1||job.assets[0].kind!=='image'||job.assets[0].type!=='image/jpeg'||job.assets[0].original!==true)throw error(422,'instagram_photo_only');

@@ -5,6 +5,7 @@ const MAX_BYTES=300000000;
 const $=id=>document.getElementById(id);
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
 const messages={
+  instagram_publish_limit:'Instagram 게시 한도를 모두 사용했습니다. 시간이 지난 뒤 계정·게시 권한을 다시 확인하세요.',
   authentication_required:'관리자 로그인이 만료됐습니다. 다시 로그인하세요.',csrf_rejected:'로그인 상태를 새로 확인하세요.',
   storage_unavailable:'원본을 보관할 서버 저장소를 확인하세요.',storage_full:'서버 저장 공간이 부족합니다.',upload_busy:'다른 파일을 저장 중입니다. 잠시 후 다시 시도하세요.',
   file_too_large:'릴스 영상은 최대 300MB입니다.',reel_too_large:'릴스 영상은 최대 300MB입니다.',invalid_filename:'파일 이름을 확인하세요.',
@@ -34,11 +35,12 @@ const messages={
   upload_cancelled:'업로드를 취소했습니다. 원본 파일은 그대로입니다. 이미 완료된 저장 여부는 보관 콘텐츠에서 확인할 수 있습니다.'
 };
 const states={prepared:'준비 완료',queued:'전송 대기',publishing:'전송·처리 확인 중',succeeded:'완료',failed:'실패',unknown:'결과 확인 필요'};
-const phases={instagram_identity:'계정 확인',instagram_reel_create:'영상 등록',instagram_reel_prepare:'영상 처리',instagram_reel_publish:'최종 전송',instagram_reel_verify:'게시 결과 확인'};
+const phases={instagram_identity:'계정 확인',instagram_permissions:'게시 권한 확인',instagram_reel_create:'영상 등록',instagram_reel_prepare:'영상 처리',instagram_reel_publish:'최종 전송',instagram_reel_verify:'게시 결과 확인'};
 function errorText(error){
   const code=typeof error?.code==='string'&&/^[a-z0-9_]{1,80}$/.test(error.code)?error.code:'server_unavailable';
   const d=error?.details||{},parts=[phases[d.phase],Number.isInteger(d.httpStatus)?'HTTP '+d.httpStatus:null,Number.isInteger(d.providerCode)?'오류 '+d.providerCode:null];
-  return (messages[code]||'요청을 완료하지 못했습니다. 오류 코드: '+code)+(parts.some(Boolean)?' ('+parts.filter(Boolean).join(' · ')+')':'');
+  const message=code==='invalid_channel_response'&&d.phase==='instagram_permissions'?'Instagram 게시 권한 응답을 확인하지 못했습니다. 계정·게시 권한 확인을 다시 실행해 주세요.':messages[code]||'요청을 완료하지 못했습니다. 오류 코드: '+code;
+  return message+(parts.some(Boolean)?' ('+parts.filter(Boolean).join(' · ')+')':'');
 }
 function fileType(file){
   if(file.type==='video/mp4'||file.type==='video/quicktime')return file.type;
@@ -54,8 +56,8 @@ function resultLink(value){
 }
 
 export function attachInstagramReels(status,getDraft){
-  const state={status,busy:false,expired:false,verified:false,file:null,url:null,media:null,localIssue:'',localPending:false,jobs:[],selected:null,expanded:new Set(),xhr:null,sequence:0,cooldown:0};
-  let poll,cooldownTimer,metadataTimer,uploadWaitTimer,metadataCleanup=()=>{};
+  const state={status,busy:false,expired:false,verified:false,quotaBlocked:false,file:null,url:null,media:null,localIssue:'',localPending:false,jobs:[],selected:null,expanded:new Set(),xhr:null,sequence:0,cooldown:0};
+  let poll,cooldownTimer,metadataTimer,uploadWaitTimer,jobsVersion=0,metadataCleanup=()=>{};
   const preview=$('reels-preview');
   const ready=()=>state.status?.authenticated===true&&state.status.mode!=='preview'&&!state.expired;
   const storage=()=>state.status?.storageReady===true;
@@ -65,7 +67,7 @@ export function attachInstagramReels(status,getDraft){
   const mediaStatus=(text,error=false)=>{$('reels-media-status').textContent=text;$('reels-media-status').classList.toggle('reels-error',error);};
   const clearProgress=()=>{clearTimeout(uploadWaitTimer);uploadWaitTimer=null;$('reels-progress-wrap').hidden=true;$('reels-progress').value=0;$('reels-progress-label').textContent='';};
   function expire(){
-    state.expired=true;state.verified=false;state.selected=null;state.xhr?.abort();clearTimeout(poll);
+    state.expired=true;state.verified=false;state.quotaBlocked=false;state.selected=null;state.xhr?.abort();clearTimeout(poll);
     $('reels-connection-status').replaceChildren(el('span','관리자 로그인이 만료됐습니다. 저장한 원본과 작업은 다시 로그인 후 확인하세요. '));
     const link=el('a','다시 로그인');link.href='/admin/login?reason=session_expired';$('reels-connection-status').append(link);controls();
   }
@@ -90,7 +92,7 @@ export function attachInstagramReels(status,getDraft){
     $('reels-cancel').hidden=!state.xhr;
     $('reels-send').disabled=!ready()||!storage()||state.busy||!state.verified||!state.status.publishingEnabled||!c?.publishingEnabled||!c?.mediaDeliveryConfigured||!state.status.channels?.instagram?.configured||job?.canSend!==true||job.status!=='prepared';
     for(const input of $('reels-jobs').querySelectorAll('input'))input.disabled=state.busy||!ready()||!state.jobs.find(j=>j.id===input.dataset.jobId)?.canSend;
-    $('reels-send-note').textContent=!ready()?'로그인 후 서버 검사·저장과 전송을 이용할 수 있습니다.':!c?.credentialsConfigured?'Instagram 인증 설정이 필요합니다.':!storage()?'서버 저장소 연결이 필요합니다.':!c.mediaDeliveryConfigured?'Instagram에 원본을 전달할 서버 설정이 필요합니다.':!c.publishingEnabled||!state.status.publishingEnabled?'Instagram 전송 설정이 꺼져 있습니다.':!state.verified?'전송 전에 인스타그램 연결 확인을 실행하세요.':!job?.canSend?'전송 가능한 릴스 작업 1개를 선택하세요.':'선택한 저장 작업만 전송합니다. 현재 편집 중인 입력과 다를 수 있으니 최종 확인하세요.';
+    $('reels-send-note').textContent=!ready()?'로그인 후 서버 검사·저장과 전송을 이용할 수 있습니다.':!c?.credentialsConfigured?'Instagram 인증 설정이 필요합니다.':!storage()?'서버 저장소 연결이 필요합니다.':!c.mediaDeliveryConfigured?'Instagram에 원본을 전달할 서버 설정이 필요합니다.':!c.publishingEnabled||!state.status.publishingEnabled?'Instagram 전송 설정이 꺼져 있습니다.':state.quotaBlocked?'Instagram 게시 한도를 모두 사용했습니다. 시간이 지난 뒤 계정·게시 권한을 다시 확인하세요.':!state.verified?'전송 전에 계정·게시 권한 확인을 실행하세요.':!job?.canSend?'전송 가능한 릴스 작업 1개를 선택하세요.':'선택한 저장 작업만 전송합니다. 현재 편집 중인 입력과 다를 수 있으니 최종 확인하세요.';
     $('reels-caption').textContent=text||'위 콘텐츠 정보에 제목과 설명을 입력하세요.';
     $('reels-caption-count').textContent=text.length.toLocaleString('ko-KR')+' / 2,200자';
     $('reels-draft-warning').textContent=text.length>2200?'릴스 문구가 2,200자를 넘습니다. 위 제목·설명·해시태그를 줄여 주세요.':'';
@@ -159,7 +161,7 @@ export function attachInstagramReels(status,getDraft){
     controls();
   }
   async function refresh(){
-    if(!ready())return;const result=await api('jobs');state.jobs=(result.jobs||[]).filter(j=>j.type==='instagram-reel'&&j.channel==='instagram');renderJobs();
+    if(!ready())return;const version=jobsVersion,result=await api('jobs');if(version!==jobsVersion)return;state.jobs=(result.jobs||[]).filter(j=>j.type==='instagram-reel'&&j.channel==='instagram');renderJobs();
   }
   function schedule(){clearTimeout(poll);if(!ready())return;poll=setTimeout(async()=>{try{if(!state.busy&&state.jobs.some(j=>['queued','publishing'].includes(j.status)))await refresh();}catch(e){feedback(errorText(e));}finally{schedule();}},2500);}
   $('reels-file').addEventListener('change',()=>choose($('reels-file').files[0],true));
@@ -180,12 +182,13 @@ export function attachInstagramReels(status,getDraft){
     const input=draft(),mediaId=state.media.id;
     const result=await api('jobs',{type:'instagram-reel',channels:['instagram'],mediaIds:[mediaId],...input});
     const saved=result.jobs?.find(j=>j.type==='instagram-reel'&&j.channel==='instagram');
-    if(saved){state.selected=saved.id;state.expanded.add(saved.id);}await refresh();feedback('릴스 작업을 저장했습니다. 준비만으로 게시되지 않습니다. 저장된 문구와 원본을 확인한 뒤 전송하세요.',true);
+    if(saved){jobsVersion++;state.jobs=[saved,...state.jobs.filter(j=>j.id!==saved.id)];state.selected=saved.id;state.expanded.add(saved.id);renderJobs();}await refresh();feedback('릴스 작업을 저장했습니다. 준비만으로 게시되지 않습니다. 저장된 문구와 원본을 확인한 뒤 전송하세요.',true);
   });});
   $('reels-check').addEventListener('click',()=>{if($('reels-check').disabled)return;busy(async()=>{
     state.verified=false;state.cooldown=Date.now()+60000;clearTimeout(cooldownTimer);cooldownTimer=setTimeout(controls,60100);
-    try{const result=await api('instagram/check',{});state.verified=result.connection?.identityVerified===true&&result.connection.username==='spymedia_kr';$('reels-connection-status').textContent=state.verified?'spymedia_kr 계정 확인됨 · 글쓰기 권한은 아직 검증하지 않았습니다.':'지정한 계정을 확인하지 못했습니다.';}
-    catch(e){$('reels-connection-status').textContent=errorText(e);throw e;}
+    window.dispatchEvent(new CustomEvent('sns-instagram-checking',{detail:{cooldown:state.cooldown}}));
+    try{const result=await api('instagram/check',{});window.dispatchEvent(new CustomEvent('sns-instagram-connection',{detail:result.connection}));}
+    catch(e){window.dispatchEvent(new CustomEvent('sns-instagram-check-failed',{detail:errorText(e)}));throw e;}
   });});
   $('reels-send').addEventListener('click',()=>{
     const job=state.jobs.find(j=>j.id===state.selected);if($('reels-send').disabled||!job)return;
@@ -195,6 +198,14 @@ export function attachInstagramReels(status,getDraft){
   });
   $('reels-refresh').addEventListener('click',()=>busy(refresh));
   window.addEventListener('sns-auth-expired',expire);
+  window.addEventListener('sns-instagram-checking',event=>{state.verified=false;state.quotaBlocked=false;state.cooldown=event.detail.cooldown;clearTimeout(cooldownTimer);cooldownTimer=setTimeout(controls,60100);$('reels-connection-status').textContent='계정과 게시 권한을 확인하고 있습니다.';controls();});
+  window.addEventListener('sns-instagram-connection',event=>{
+    const c=event.detail,identity=c?.identityVerified===true&&c.username==='spymedia_kr',permissions=identity&&c.publishingPermissionsVerified===true,q=c?.publishingQuota;
+    state.quotaBlocked=permissions&&c.publishingQuotaAvailable===false;state.verified=permissions&&!state.quotaBlocked;
+    const quota=permissions&&Number.isSafeInteger(q?.used)&&q.used>=0&&Number.isSafeInteger(q?.total)&&q.total>0?' · 게시 한도 '+q.used.toLocaleString('ko-KR')+' / '+q.total.toLocaleString('ko-KR')+' 사용':'';
+    $('reels-connection-status').textContent=permissions?'spymedia_kr 계정 확인됨 · 게시 권한 확인됨'+quota+(state.quotaBlocked?' · 게시 한도를 모두 사용해 현재 전송할 수 없습니다. 시간이 지난 뒤 다시 확인하세요.':' · 실제 게시 결과는 전송 후 확인합니다.'):identity?'spymedia_kr 계정 확인됨 · 게시 권한을 확인하지 못해 전송을 중단했습니다.':'지정한 계정을 확인하지 못했습니다.';controls();
+  });
+  window.addEventListener('sns-instagram-check-failed',event=>{state.verified=false;state.quotaBlocked=false;$('reels-connection-status').textContent=event.detail;controls();});
   window.addEventListener('pagehide',()=>{clearTimeout(poll);clearTimeout(cooldownTimer);clearTimeout(metadataTimer);clearTimeout(uploadWaitTimer);metadataCleanup();state.xhr?.abort();preview.pause();preview.removeAttribute('src');preview.load();if(state.url)URL.revokeObjectURL(state.url);state.url=null;});
   $('reels-connection-status').textContent=!ready()?'로컬 미리보기입니다. 실제 검사·저장과 전송은 로그인 후 가능합니다.':status.instagramConnection?.credentialsConfigured?'기존 인증 설정 있음 · 계정 미확인':'기존 Instagram 인증 설정이 필요합니다.';
   controls();if(ready())refresh().catch(e=>feedback(errorText(e)));schedule();
