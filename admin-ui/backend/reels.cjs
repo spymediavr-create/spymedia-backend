@@ -62,7 +62,11 @@ async function inspectReel(settings,file,execute=run){
   try{
     const text=await execute(settings.ffprobe,['-v','error','-max_alloc','67108864','-protocol_whitelist','file','-format_whitelist','mov','-f','mov','-enable_drefs','0','-probesize','8388608','-analyzeduration','5000000','-show_streams','-show_format','-of','json',file],30000);
     data=JSON.parse(text);
-  }catch(e){throw error(e.code==='media_tools_unavailable'?503:422,e.code==='media_tools_unavailable'?'reel_probe_unavailable':'invalid_reel');}
+  }catch(e){
+    if(e.code==='media_tools_unavailable')throw error(503,'reel_probe_unavailable');
+    if(e.code==='media_processing_timeout')throw error(503,'reel_probe_timeout');
+    throw error(422,'invalid_reel');
+  }
   const streams=Array.isArray(data.streams)?data.streams:[],videos=streams.filter(s=>s.codec_type==='video'),audios=streams.filter(s=>s.codec_type==='audio');
   if(videos.length!==1||audios.length>1||streams.some(s=>!['video','audio','data'].includes(s.codec_type)))throw error(422,'invalid_reel');
   const v=videos[0],a=audios[0],side=(v.side_data_list||[]).find(s=>s.rotation!==undefined);

@@ -15,4 +15,5 @@
 .reels-jobs-heading{margin-top:22px}#reels-progress-wrap{display:flex;align-items:center;gap:8px;font-size:11px;margin-top:12px}
 #reels-progress-wrap label{flex:none}#reels-progress{min-width:0;flex:1;accent-color:var(--cyan)}
 #reels-jobs .record-details video{width:100%;max-height:340px}.reels-error{color:var(--danger)}
+#reels-media-status.reels-error{padding:10px 12px;border-left:3px solid var(--danger);border-radius:4px;background:#fff0f0;font-weight:600}
 @media(max-width:760px){.reels-panel{padding:18px 15px}.reels-layout{grid-template-columns:1fr;gap:12px}.reels-file-panel,.reels-draft-panel{padding:14px}.reels-account{font-size:10px}.reels-panel>.section-heading{align-items:start}.reels-caption{min-height:100px}.reels-jobs-heading{align-items:start}.reels-connection{gap:10px}.page-heading>.ig-helper-link{white-space:normal;max-width:125px;flex:none;text-align:center}}

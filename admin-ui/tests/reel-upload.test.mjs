@@ -12,6 +12,7 @@ import {Photos} from '../backend/photos.cjs';
 import {Service} from '../backend/service.cjs';
 import {Reels,validateReelMetadata,containerInfo,LIMIT} from '../backend/reels.cjs';
 import {createAdminHandler} from '../server-core.cjs';
+import {logReelUploadFailure,safeFailureCode} from '../backend/diagnostics.cjs';
 
 // These are real bounded ISO-BMFF boxes, not a playable encoded video. Only
 // ffprobe's executable response is mocked; the production box reader runs.
@@ -107,7 +108,7 @@ test('faststart and nested edit lists are enforced without changing original ISO
 test('probe errors and malformed responses fail closed and clean all temporary state',async t=>{
   for(const [execute,code,status] of [
     [async()=>{throw Object.assign(Error('private command error'),{code:'media_tools_unavailable'});},'reel_probe_unavailable',503],
-    [async()=>{throw Object.assign(Error('timeout'),{code:'media_processing_timeout'});},'invalid_reel',422],
+    [async()=>{throw Object.assign(Error('timeout'),{code:'media_processing_timeout'});},'reel_probe_timeout',503],
     [async()=>'{not JSON','invalid_reel',422],
     [async()=>JSON.stringify({streams:[],format:{duration:'4'}}),'invalid_reel',422],
     [async()=>JSON.stringify({streams:[...probeData().streams,probeData().streams[0]],format:{duration:'4'}}),'invalid_reel',422],
@@ -168,9 +169,66 @@ test('protected reel upload and status require authentication, Origin and CSRF a
   const response=await req(route,{method:'POST',headers,body:bytes});assert.equal(response.status,201);const result=await response.json();assert.equal(result.media.sha256,createHash('sha256').update(bytes).digest('hex'));assert.equal(f.calls.length,1);assert.deepEqual(await fs.readFile(f.store.file(result.media.id)),bytes);
 });
 
-test('API probe unavailability reports 503 and removes the failed upload without exposing command output',async t=>{
-  const f=await fixture(t,{execute:async()=>{throw Object.assign(Error('private environment detail'),{code:'media_tools_unavailable'});}}),{req,headers}=await apiFixture(t,f);
-  const response=await req('/api/admin/reels',{method:'POST',headers,body:videoBytes()});assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'reel_probe_unavailable'});await clean(f);
+test('API probe unavailability and timeout report distinct 503 errors and remove the failed upload',async t=>{
+  const marker='private-probe-command-output',logs=[],saved=console.error;
+  try{
+    console.error=value=>logs.push(value);
+    for(const [cause,code] of [['media_tools_unavailable','reel_probe_unavailable'],['media_processing_timeout','reel_probe_timeout']]){
+      const f=await fixture(t,{execute:async()=>{throw Object.assign(Error(marker),{code:cause,stack:marker,path:marker});}}),{req,headers}=await apiFixture(t,f);
+      const response=await req('/api/admin/reels',{method:'POST',headers,body:videoBytes()});assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:code});await clean(f);
+      assert.equal(safeFailureCode(code),code);
+    }
+  }finally{console.error=saved;}
+  assert.deepEqual(logs.map(JSON.parse),['reel_probe_unavailable','reel_probe_timeout'].map(error=>({event:'sns_reel_upload_failed',error,httpStatus:503})));
+  assert.equal(logs.join('').includes(marker),false);
+});
+
+test('upload diagnostics accept only reel upload codes and valid failure HTTP statuses',()=>{
+  const marker='private-filename-path-url-body-stack-token',logs=[],saved=console.error;
+  const secretFields={message:marker,stack:marker,filename:marker,path:marker,url:marker,body:marker,headers:{Authorization:marker},providerDetails:{httpStatus:422,providerType:marker}};
+  try{
+    console.error=value=>logs.push(value);
+    logReelUploadFailure({...secretFields,code:'reel_audio_bitrate'},422);
+    logReelUploadFailure({...secretFields,code:'storage_full'},507);
+    logReelUploadFailure({...secretFields,code:marker},422);
+    logReelUploadFailure({...secretFields,code:'channel_auth_or_permission'},502);
+    for(const status of [200,600,'422',NaN,undefined])logReelUploadFailure({...secretFields,code:'invalid_reel'},status);
+  }finally{console.error=saved;}
+  assert.deepEqual(logs.map(JSON.parse),[
+    {event:'sns_reel_upload_failed',error:'reel_audio_bitrate',httpStatus:422},
+    {event:'sns_reel_upload_failed',error:'storage_full',httpStatus:507},
+    {event:'sns_reel_upload_failed',error:'request_failed',httpStatus:422},
+    {event:'sns_reel_upload_failed',error:'request_failed',httpStatus:502},
+    ...Array.from({length:5},()=>({event:'sns_reel_upload_failed',error:'invalid_reel',httpStatus:500}))
+  ]);
+  assert.equal(logs.join('').includes(marker),false);
+});
+
+test('only failed authenticated reel POST requests log sanitized upload diagnostics',async t=>{
+  const f=await fixture(t),{req,headers}=await apiFixture(t,f),marker='private-upload-filename-path-url-body-token',logs=[],saved=console.error;
+  const upload=f.reels.upload.bind(f.reels),bytes=videoBytes();
+  try{
+    console.error=value=>logs.push(value);
+    assert.equal((await req('/api/admin/reels',{method:'POST',body:bytes})).status,401);
+    assert.equal((await req('/api/admin/reels',{method:'POST',headers:{...headers,'X-CSRF-Token':''},body:bytes})).status,403);
+    assert.equal((await req('/api/admin/reels',{headers})).status,404);
+    assert.equal((await req('/api/admin/reels',{method:'POST',headers,body:bytes})).status,201);
+    assert.deepEqual(logs,[]);
+    const common={stack:marker,filename:marker,path:marker,url:marker,request:{body:marker,headers:{Authorization:marker}}};
+    for(const [failure,status,code] of [
+      [Object.assign(Error(marker),common,{code:'reel_fast_start',status:422}),422,'reel_fast_start'],
+      [Object.assign(Error(marker),common,{code:marker}),500,'request_failed']
+    ]){
+      f.reels.upload=async request=>{for await(const chunk of request){}throw failure;};
+      const response=await req('/api/admin/reels?'+marker,{method:'POST',headers:{...headers,'X-Upload-Name':marker},body:bytes});
+      assert.equal(response.status,status);assert.deepEqual(await response.json(),{error:code});
+    }
+  }finally{console.error=saved;f.reels.upload=upload;}
+  assert.deepEqual(logs.map(JSON.parse),[
+    {event:'sns_reel_upload_failed',error:'reel_fast_start',httpStatus:422},
+    {event:'sns_reel_upload_failed',error:'request_failed',httpStatus:500}
+  ]);
+  assert.equal(logs.join('').includes(marker),false);
 });
 
 test('signed original reel delivery returns exact bytes, Content-Type and bounded Range without exposing private upload routes',async t=>{

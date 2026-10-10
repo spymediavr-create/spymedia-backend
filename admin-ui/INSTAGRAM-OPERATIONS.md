@@ -15,6 +15,10 @@
 
 FFprobe는 기존 `FFPROBE_PATH` 또는 `ffprobe`를 사용한다. 도구가 없으면 검사를 통과시키지 않는다. [Render native runtime](https://render.com/docs/native-runtimes)은 FFmpeg 도구를 기본 제공하지만 기존 서비스에서 실제 검사를 확인해야 한다. 새 서비스·디스크·인증 권한을 만들지 않는다.
 
+업로드 100%의 **파일 전송 완료 · 검사 결과 대기**는 브라우저의 전송 완료를 뜻하며, 서버 저장 성공이나 Instagram 게시 완료를 뜻하지 않는다. 서버 응답이 60초 이상 없으면 영상 아래에 지연 안내를 표시하고 자동 취소·재전송하지 않는다. 오류나 취소가 확정되면 진행 표시를 지우고 같은 위치에 이유를 표시한다. FFprobe의 30초 제한 초과는 `reel_probe_timeout`(503)으로 구분한다.
+
+업로드 실패 로그 `sns_reel_upload_failed`는 허용된 오류 코드와 HTTP 상태만 기록한다. 파일명·영상 내용·문구·요청 본문·인증정보는 기록하지 않는다. 취소나 네트워크 단절 이후 서버에 저장됐는지는 보관 콘텐츠에서 확인한다.
+
 기존 Instagram Login의 검증된 `user_id`에 `media_type=REELS`, 원본 서명 HTTPS `video_url`을 전달한다. 컨테이너 상태를 최대 6회, 60초 간격으로 확인하고 준비 완료 후에만 게시 시도 체크포인트를 기록한다. 게시 응답 ID의 `media_product_type=REELS`와 결과 ID를 확인한다. 사진과 같은 중복 키·재시작 보호를 적용한다. 준비·검사·목록 조회는 공개 게시를 하지 않으며, 게시 결과가 불확실하면 자동 재전송하지 않는다.
 
 형식 참고: [Meta 공식 Reels 샘플](https://github.com/fbsamples/reels_publishing_apis/blob/main/insta_reels_publishing_api_sample/README.md), [Meta 공식 Postman](https://www.postman.com/meta/instagram/folder/f95kq5e/reels-publishing). 공식 자료의 파일 최대 용량 표기가 서로 달라 300MB를 보수적인 앱 제한으로 사용한다. Meta의 최종 게시 수락을 로컬 검사만으로 보장하지 않는다.

@@ -1,6 +1,8 @@
 const PHASES=new Set(['facebook_identity','facebook_link_create','facebook_link_verify','x_identity','x_link_create','x_link_verify','x_token_refresh','instagram_identity','instagram_photo_create','instagram_photo_prepare','instagram_photo_publish','instagram_photo_verify','instagram_reel_create','instagram_reel_prepare','instagram_reel_publish','instagram_reel_verify']);
 const SAFE_ERRORS=new Set(['channel_auth_or_permission','channel_rate_limit','channel_request_failed','channel_network_failure','channel_not_configured','account_mismatch','verify_publication','invalid_channel_response','x_auth_configuration','x_auth_expired','x_unauthorized','x_forbidden','x_payment_required','x_scope_missing','x_cost_confirmation_required','x_token_storage_unavailable','x_refresh_reauthorization_required','instagram_not_configured','instagram_photo_only','instagram_photo_dimensions','instagram_reel_only','instagram_content_limits','channel_media_processing','channel_media_processing_timeout']);
-for(const code of ['reel_type_required','reel_too_large','reel_dimensions','reel_duration','reel_video_codec','reel_frame_rate','reel_video_bitrate','reel_pixel_format','reel_interlaced','reel_rotation','reel_fast_start','reel_edit_list','reel_audio_codec','reel_audio_sample_rate','reel_audio_channels','reel_audio_bitrate','reel_probe_unavailable','invalid_reel'])SAFE_ERRORS.add(code);
+const REEL_ERRORS=['reel_type_required','reel_too_large','reel_dimensions','reel_duration','reel_video_codec','reel_frame_rate','reel_video_bitrate','reel_pixel_format','reel_interlaced','reel_rotation','reel_fast_start','reel_edit_list','reel_audio_codec','reel_audio_sample_rate','reel_audio_channels','reel_audio_bitrate','reel_probe_unavailable','reel_probe_timeout','invalid_reel'];
+for(const code of REEL_ERRORS)SAFE_ERRORS.add(code);
+const REEL_UPLOAD_ERRORS=new Set([...REEL_ERRORS,'invalid_filename','storage_unavailable','storage_full','upload_busy']);
 const TYPES=new Set(['OAuthException','GraphMethodException','FacebookApiException','APIException','Exception','invalid_grant','invalid_client','unauthorized_client','invalid_scope','unsupported_grant_type','temporarily_unavailable']);
 // Exact problem URIs and titles become fixed identifiers. Never forward upstream prose or URLs.
 const X_PROBLEMS=new Map([
@@ -67,4 +69,9 @@ function logXConnectionFailure(value) {
   if(!details?.phase?.startsWith('x_')||!details.httpStatus)return;
   console.error(JSON.stringify({event:'sns_connection_failed',channel:'x',error:safeFailureCode(value.code),...details}));
 }
-module.exports={failureDetails,providerFailure,logJobFailure,logXConnectionFailure,safeFailureCode};
+function logReelUploadFailure(value,status) {
+  const httpStatus=Number.isInteger(status)&&status>=400&&status<=599?status:500;
+  // Upload diagnostics contain fixed codes only, never file names, paths or error prose.
+  console.error(JSON.stringify({event:'sns_reel_upload_failed',error:REEL_UPLOAD_ERRORS.has(value?.code)?value.code:'request_failed',httpStatus}));
+}
+module.exports={failureDetails,providerFailure,logJobFailure,logXConnectionFailure,logReelUploadFailure,safeFailureCode};

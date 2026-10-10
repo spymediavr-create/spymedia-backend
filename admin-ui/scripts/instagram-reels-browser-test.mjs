@@ -33,7 +33,7 @@ const connectors=new Connectors(settings,{mediaUrl:asset=>service.signedUrl(asse
 const reels={upload:async req=>{
   uploadCalls++;assert.equal(req.headers['content-type'],'video/mp4');assert.ok(req.headers['x-csrf-token']);
   const chunks=[];for await(const chunk of req)chunks.push(chunk);const bytes=Buffer.concat(chunks);
-  if(holdUpload)await holdUpload;if(uploadError)throw Object.assign(Error(uploadError),{status:422,code:uploadError});
+  if(holdUpload)await holdUpload;if(uploadError)throw Object.assign(Error(uploadError.code),uploadError);
   const sha256=createHash('sha256').update(bytes).digest('hex'),duplicate=Object.values(store.state.media).find(m=>m.sha256===sha256);
   if(duplicate)return duplicate;
   const item={id:randomUUID(),name:decodeURIComponent(req.headers['x-upload-name']),kind:'video',type:'video/mp4',profile:'instagram-reel-original',size:bytes.length,sha256,width:360,height:640,duration:4,videoCodec:'h264',audioCodec:null,frameRate:30,videoBitrate:1000000,audioSampleRate:0,audioChannels:0,audioBitrate:0,pixelFormat:'yuv420p',fieldOrder:'progressive',rotation:0,fastStart:true,hasEditList:false,createdAt:new Date().toISOString()};
@@ -73,12 +73,32 @@ try{
   assert.match(await page.locator('#reels-file-info').textContent(),/360 × 640px/);assert.equal(uploadCalls,0);assert.match(await page.locator('#reels-local-check').textContent(),/최종 검사는 서버/);pass('real 9:16 MP4 previews locally and accurately distinguishes browser metadata from final server checks');
   assert.equal(await page.locator('#reels-file').evaluate(input=>input.files[0]?.name),file.name);
   const oldUrl=await page.locator('#reels-preview').getAttribute('src');await page.locator('#reels-clear').click();assert.equal(await page.locator('#reels-preview').isHidden(),true);assert.equal(await page.locator('#reels-preview').getAttribute('src'),null);assert.equal(await page.evaluate(url=>window.__objects.revoked.includes(url),oldUrl),true);pass('selection retains its visible filename; clearing releases the object URL and detaches the video');
-  await page.locator('#reels-file').setInputFiles(file);await page.waitForFunction(()=>!document.getElementById('reels-upload').disabled);uploadError='reel_video_codec';await page.locator('#reels-upload').click();await page.waitForFunction(()=>document.getElementById('reels-feedback').textContent.includes('H.264 또는 HEVC'));
-  assert.equal(await page.locator('#reels-prepare').isDisabled(),true);assert.equal(calls.length,0);assert.equal(Object.keys(store.state.media).length,0);uploadError=null;pass('server codec rejection explains re-export requirements and never prepares or publishes');
+  await page.locator('#reels-file').setInputFiles(file);await page.waitForFunction(()=>!document.getElementById('reels-upload').disabled);
+  const assertUploadFinished=async()=>{
+    assert.equal(await page.locator('#reels-progress-wrap').isHidden(),true);assert.equal(await page.locator('#reels-progress-label').textContent(),'');assert.equal(await page.locator('#reels-progress').evaluate(progress=>progress.value),0);
+    assert.equal(await page.locator('#reels-cancel').isHidden(),true);assert.equal(await page.locator('#reels-file').isEnabled(),true);assert.equal(await page.locator('#reels-upload').isEnabled(),true);assert.equal(await page.locator('#reels-prepare').isDisabled(),true);
+  };
+  for(const failure of [{status:422,code:'reel_video_codec',message:'H.264 또는 HEVC'},{status:503,code:'reel_probe_unavailable',message:'서버의 영상 검사 도구'}]){
+    uploadError={status:failure.status,code:failure.code};holdUpload=new Promise(resolve=>releaseUpload=resolve);
+    await page.locator('#reels-upload').click();await page.waitForFunction(()=>document.getElementById('reels-progress').value===100&&document.getElementById('reels-progress-label').textContent==='파일 전송 완료 · 검사 결과 대기');
+    assert.equal(await page.locator('#reels-upload').isDisabled(),true);assert.equal(await page.locator('#reels-media-status').textContent(),'');assert.equal(await page.locator('#reels-media-status').evaluate(status=>status.classList.contains('reels-error')),false);
+    if(failure.status===503){
+      const pendingUploads=uploadCalls;await page.waitForFunction(()=>document.getElementById('reels-media-status').textContent.includes('서버 응답이 지연'),null,{timeout:75000});
+      assert.match(await page.locator('#reels-media-status').textContent(),/취소해도 서버 저장 여부는 보관 콘텐츠에서 별도 확인/);assert.equal(uploadCalls,pendingUploads);assert.equal(await page.locator('#reels-cancel').isVisible(),true);assert.equal(await page.locator('#reels-upload').isDisabled(),true);assert.equal(Object.keys(store.state.media).length,0);
+      pass('a response pending for 60 seconds shows a file-level delay notice without aborting or submitting again');
+    }
+    const response=page.waitForResponse(response=>response.url()===origin+'/api/admin/reels');releaseUpload();holdUpload=null;assert.equal((await response).status(),failure.status);
+    await page.waitForFunction(message=>document.getElementById('reels-media-status').textContent.includes(message)&&!document.getElementById('reels-upload').disabled,failure.message);
+    assert.equal(await page.locator('#reels-media-status').isVisible(),true);assert.equal(await page.locator('#reels-media-status').evaluate(status=>status.classList.contains('reels-error')),true);
+    assert.equal(await page.locator('#reels-media-status').textContent(),await page.locator('#reels-feedback').textContent());assert.equal(await page.locator('#reels-drop #reels-media-status').count(),1);await assertUploadFinished();
+    assert.equal(calls.length,0);assert.equal(Object.keys(store.state.media).length,0);uploadError=null;
+    pass('HTTP '+failure.status+' after 100% upload replaces processing with a visible file-level error and allows retry without preparing or publishing');
+  }
+  await page.locator('#reels-drop').screenshot({path:path.join(output,'reels-upload-error.png')});
   holdUpload=new Promise(resolve=>releaseUpload=resolve);await page.locator('#reels-upload').click();await page.locator('#reels-cancel').waitFor({state:'visible'});assert.equal(await page.locator('#reels-upload').isDisabled(),true);await page.locator('#reels-cancel').click();await page.waitForFunction(()=>document.getElementById('reels-feedback').textContent.includes('업로드를 취소'));
-  assert.equal(await page.locator('#reels-prepare').isDisabled(),true);releaseUpload();holdUpload=null;pass('in-flight upload shows progress/cancel, blocks duplicate actions and cancellation never prepares a job');
+  assert.match(await page.locator('#reels-media-status').textContent(),/업로드를 취소/);assert.equal(await page.locator('#reels-media-status').evaluate(status=>status.classList.contains('reels-error')),true);await assertUploadFinished();releaseUpload();holdUpload=null;pass('cancelled upload clears processing, shows cancellation beside the file and allows retry without preparing a job');
   await page.locator('#reels-upload').click();await page.waitForFunction(()=>document.getElementById('reels-media-status').textContent.includes('서버 검사 완료'));
-  assert.equal(calls.length,0);const savedMedia=Object.values(store.state.media)[0];assert.deepEqual(await fs.readFile(store.file(savedMedia.id)),video);assert.equal(await page.locator('#reels-prepare').isEnabled(),true);assert.equal(await page.locator('#reels-upload').isDisabled(),true);pass('successful raw upload preserves every original byte and enables preparation without provider requests');
+  assert.equal(calls.length,0);const savedMedia=Object.values(store.state.media)[0];assert.deepEqual(await fs.readFile(store.file(savedMedia.id)),video);assert.equal(await page.locator('#reels-prepare').isEnabled(),true);assert.equal(await page.locator('#reels-upload').isDisabled(),true);assert.equal(await page.locator('#reels-progress-wrap').isHidden(),true);assert.equal(await page.locator('#reels-progress-label').textContent(),'');assert.equal(await page.locator('#reels-media-status').evaluate(status=>status.classList.contains('reels-error')),false);pass('successful retry clears the error style and processing status, preserves every original byte and enables preparation without provider requests');
   await page.locator('#reels-prepare').click();await page.waitForFunction(()=>document.querySelector('#reels-jobs .record-item[data-status=prepared]'));
   assert.equal(calls.length,0);assert.equal(await page.locator('#reels-send').isDisabled(),true);await page.locator('#reels-check').click();await page.waitForFunction(()=>document.getElementById('reels-connection-status').textContent.includes('계정 확인됨'));
   assert.deepEqual(calls,[{method:'GET',phase:'identity'}]);assert.match(await page.locator('#reels-connection-status').textContent(),/글쓰기 권한은 아직 검증하지/);assert.equal(await page.locator('#reels-send').isEnabled(),true);pass('preparation saves an immutable job; explicit identity check alone cannot claim publish permissions');
