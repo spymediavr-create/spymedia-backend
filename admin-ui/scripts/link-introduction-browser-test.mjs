@@ -22,7 +22,7 @@ const store=new Store(settings);await store.init();
 const connectors={checkFacebookConnection:async()=>{facebookChecks++;if(facebookFails)throw Object.assign(Error(diagnosticSecret),{status:409,code:'channel_auth_or_permission',phase:'facebook_identity',providerDetails:{httpStatus:403,providerCode:200,providerSubcode:463,providerType:'OAuthException',message:diagnosticSecret}});return {pageId:'1387247911137772',identityVerified:true,publishingPermissionsVerified:false,publishingEnabled:true,token:diagnosticSecret};},availability:()=>({facebook:true,x:false,blog:true,instagram:true,youtube:false}),publish:async job=>{assert.equal(job.type,'link');assert.equal(job.channel,'facebook');posts++;return {externalId:'mock-only',url:'https://www.facebook.com/mock-only'};}};
 const media={tools:async()=>{conversionCalls++;throw Error('Video probe prohibited');},convert:async()=>{conversionCalls++;throw Error('Video conversion prohibited');}};
 const service=new Service({settings,store,connectors,media,diagnosticNow:()=>diagnosticClock});
-const browser=await chromium.launch({headless:true}),context=await browser.newContext({viewport:{width:1440,height:1100}});
+const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_EXECUTABLE?{executablePath:process.env.CHROMIUM_EXECUTABLE}:{})}),context=await browser.newContext({viewport:{width:1440,height:1100}});
 await context.addInitScript(()=>{Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.__copied=text;}}});});
 const page=await context.newPage();
 const jpeg=Buffer.from(await page.evaluate(()=>{

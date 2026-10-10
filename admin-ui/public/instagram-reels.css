@@ -1,4 +1,14 @@
-.reels-panel{padding:24px;margin-bottom:24px;scroll-margin-top:20px}
+.suite-panel{padding:24px;margin-bottom:18px;scroll-margin-top:20px;border-color:#b5dee6}
+.suite-panel h2{font-size:18px;margin-top:5px}.suite-panel>.section-heading>div{min-width:0}
+.suite-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px}
+.suite-caption-panel,.suite-guide{min-width:0}.suite-caption-panel>label{display:block;font-size:12px;font-weight:600;margin-bottom:8px}
+#instagram-suite-caption{min-height:180px;max-width:100%;line-height:1.8;overflow-wrap:anywhere;white-space:pre-wrap;background:#f8fbfd;cursor:text}
+.suite-caption-meta{display:flex;align-items:start;justify-content:space-between;gap:12px;margin-top:8px}.suite-caption-meta .field-hint{margin:0}.suite-caption-meta .quiet-label{flex:none}
+.suite-guide{padding:18px;border:1px solid var(--line);border-radius:8px;background:#f8fbfd}.suite-guide h3{font-size:13px}.suite-guide ol{padding-left:21px;margin:12px 0;font-size:12px;line-height:1.8;color:#526d80}.suite-guide li+li{margin-top:7px}.suite-manual-note{font-size:11px;line-height:1.8;color:#657b8e;border-top:1px solid var(--line);padding-top:12px}
+.suite-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:18px}.suite-actions .primary-button{width:auto;height:auto;margin:0;padding:11px 17px;font-size:12px}.suite-actions .outline-button{padding:10px 16px;white-space:normal;text-align:center;max-width:100%}
+#instagram-suite-feedback{font-size:12px;line-height:1.8;margin-top:12px;overflow-wrap:anywhere}#instagram-suite-feedback:empty{display:none}
+.instagram-direct{margin-bottom:24px;border:1px solid var(--line);border-radius:9px;background:white}.instagram-direct>summary{padding:15px 20px;cursor:pointer;font-size:12px;font-weight:600;color:#5b7183}.instagram-direct>summary:focus-visible{outline:3px solid #73d7e6;outline-offset:3px}.instagram-direct[open]>summary{border-bottom:1px solid var(--line)}
+.reels-panel{padding:24px;margin-bottom:24px;scroll-margin-top:20px}.instagram-direct>.reels-panel{margin:0;border:0;box-shadow:none}
 .reels-panel h2{font-size:18px;margin-top:5px}.reels-panel h3{font-size:13px}
 .reels-account{flex:none;color:var(--cyan-dark);font-size:12px;font-weight:600}
 .reels-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
@@ -17,3 +27,4 @@
 #reels-jobs .record-details video{width:100%;max-height:340px}.reels-error{color:var(--danger)}
 #reels-media-status.reels-error{padding:10px 12px;border-left:3px solid var(--danger);border-radius:4px;background:#fff0f0;font-weight:600}
 @media(max-width:760px){.reels-panel{padding:18px 15px}.reels-layout{grid-template-columns:1fr;gap:12px}.reels-file-panel,.reels-draft-panel{padding:14px}.reels-account{font-size:10px}.reels-panel>.section-heading{align-items:start}.reels-caption{min-height:100px}.reels-jobs-heading{align-items:start}.reels-connection{gap:10px}.page-heading>.ig-helper-link{white-space:normal;max-width:125px;flex:none;text-align:center}}
+@media(max-width:760px){.suite-panel{padding:18px 15px}.suite-panel>.section-heading{align-items:start;flex-wrap:wrap}.suite-layout{grid-template-columns:minmax(0,1fr);gap:14px}.suite-guide{padding:14px}.suite-caption-meta{flex-wrap:wrap;gap:6px}.suite-actions{flex-direction:column;align-items:stretch;gap:10px}.suite-actions .primary-button{width:100%;white-space:normal}.instagram-direct>summary{padding:14px 15px}.preview-media[data-channel=instagram] .media-placeholder{max-width:100%;padding:14px;text-align:center}.preview-media[data-channel=instagram] .media-placeholder p{white-space:pre-line}}
