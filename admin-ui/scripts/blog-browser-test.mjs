@@ -15,7 +15,7 @@ const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAY
 const output=fileURLToPath(new URL('../test-results/blog/',import.meta.url));
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'spymedia-blog-browser-'));
 await fs.mkdir(output,{recursive:true});
-const checks=[],errors=[],external=[],naverRequests=[],localRequests=[],postBodies=[];
+const checks=[],errors=[],external=[],naverRequests=[],youtubeRequests=[],localRequests=[],postBodies=[];
 const pass=message=>{checks.push(message);console.log('PASS '+message);};
 let providerCalls=0,mediaToolCalls=0,blogFailure=null,delayedJobsGet=null,releaseJobsGet=null,browser,server;
 const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'false'});
@@ -44,6 +44,7 @@ try{
   await context.route('**/*',async route=>{
     const request=route.request(),url=request.url();
     if(url===NAVER){naverRequests.push({url,headers:await request.allHeaders()});return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Local Naver placeholder</title><p>Network blocked: local test only.</p>'});}
+    if(/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(url)){youtubeRequests.push({url,headers:await request.allHeaders()});return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Local video placeholder</title>'});}
     if(url.startsWith(origin+'/')||url.startsWith('blob:'+origin)||url.startsWith('data:')){
       if(url===origin+'/api/admin/jobs'&&request.method()==='GET'&&delayedJobsGet){
         const delayed=delayedJobsGet;delayed.entered();await delayed.gate;
@@ -84,6 +85,17 @@ try{
 
   assert.equal((await context.request.get(origin+'/admin',{maxRedirects:0})).status(),303);
   await enter();
+  assert.equal(await page.locator('#blog-copy-video').isDisabled(),true);assert.equal(await page.locator('#blog-open-video').isHidden(),true);assert.equal(await page.locator('#blog-open-video').getAttribute('href'),null);
+  const soloVideo='https://www.youtube.com/watch?v=AbCdEf123_-';
+  await page.locator('#blog-youtube').fill('https://www.youtube.com/shorts/AbCdEf123_-?si=synthetic');
+  await page.locator('#blog-copy-video').click();assert.equal(await page.evaluate(()=>window.__copied),soloVideo);
+  assert.equal(await page.locator('#blog-title').inputValue(),'');assert.equal(await page.locator('#blog-body').inputValue(),'');
+  await page.evaluate(()=>window.__clipboardFails=true);await page.locator('#blog-copy-video').click();assert.equal(await selectedText(),soloVideo);await page.evaluate(()=>window.__clipboardFails=false);
+  const videoPopupPending=page.waitForEvent('popup');await page.locator('#blog-open-video').click();const videoPopup=await videoPopupPending;await videoPopup.waitForLoadState();
+  assert.equal(videoPopup.url(),soloVideo);assert.equal(await videoPopup.evaluate(()=>window.opener),null);await videoPopup.close();
+  assert.equal(youtubeRequests.length,1);assert.equal(youtubeRequests[0].headers.referer,undefined);
+  await page.locator('#blog-youtube').fill('');assert.equal(await page.locator('#blog-copy-video').isDisabled(),true);assert.equal(await page.locator('#blog-open-video').getAttribute('href'),null);
+  pass('A standalone Shorts link copies without a manuscript, supports manual clipboard fallback, and opens only the normalized video in an isolated tab without a real YouTube request');
   await page.locator('#title').fill('사진 없는 블로그 원고');await page.locator('#description').fill('유튜브 주소 없이 작성한 원고입니다.');await generate();
   assert.equal(await page.locator('#blog-title').inputValue(),'사진 없는 블로그 원고');
   assert.match(await page.locator('#blog-body').inputValue(),/유튜브 주소 없이 작성한 원고입니다/);
@@ -117,6 +129,17 @@ try{
   acceptDialog=false;await page.locator('#blog-generate').click();acceptDialog=true;assert.equal(await page.locator('#blog-body').inputValue(),editedBody);
   pass('Explicit generation preserves paragraphs and optional context; independent edits survive shared-source changes and cancelled regeneration');
 
+  const photoKeysBefore=await page.locator('#blog-photos [data-photo-key]').evaluateAll(rows=>rows.map(row=>row.dataset.photoKey));
+  const blogTagsBefore=await page.locator('#blog-tags').inputValue();
+  await page.locator('#youtube-url').fill('https://m.youtube.com/live/JkLmnOp45_6?si=synthetic');await page.locator('#blog-use-shared-video').click();
+  assert.equal(await page.locator('#blog-youtube').inputValue(),'https://www.youtube.com/watch?v=JkLmnOp45_6');
+  assert.equal(await page.locator('#blog-title').inputValue(),editedTitle);assert.equal(await page.locator('#blog-body').inputValue(),editedBody);assert.equal(await page.locator('#blog-tags').inputValue(),blogTagsBefore);
+  assert.deepEqual(await page.locator('#blog-photos [data-photo-key]').evaluateAll(rows=>rows.map(row=>row.dataset.photoKey)),photoKeysBefore);
+  await page.locator('#youtube-url').fill('https://youtube.com.evil.invalid/watch?v=AbCdEf123_-');await page.locator('#blog-use-shared-video').click();assert.equal(await page.locator('#blog-youtube').inputValue(),'https://www.youtube.com/watch?v=JkLmnOp45_6');
+  await page.locator('#youtube-url').fill('https://youtu.be/AbCdEf123_-?si=synthetic');assert.equal(await page.locator('#blog-youtube').inputValue(),'https://www.youtube.com/watch?v=JkLmnOp45_6');await page.locator('#blog-use-shared-video').click();
+  assert.equal(await page.locator('#blog-youtube').inputValue(),soloVideo);
+  pass('Importing only the common video link preserves edited text, tags, and photo order; later common edits or invalid source links cannot overwrite the reviewed link');
+
   await page.locator('#blog-copy-title').click();assert.equal(await page.evaluate(()=>window.__copied),editedTitle);
   await page.locator('#blog-copy-body').click();const composedBody=await page.evaluate(()=>window.__copied);
   assert.match(composedBody,/직접 수정한 본문입니다/);assert.match(composedBody,/#블로그전용 #SpyMedia/);assert.match(composedBody,/https:\/\/www.youtube.com\/watch\?v=AbCdEf123_-/);
@@ -143,11 +166,13 @@ try{
   await page.locator('#blog-youtube').fill('https://youtube.com.evil.invalid/watch?v=AbCdEf123_-');await page.locator('#blog-save').click();
   assert.match(await page.locator('#blog-feedback').textContent(),/유튜브|YouTube|주소/);assert.equal(postBodies.length,beforeInvalid);
   assert.equal(await page.locator('#blog-youtube-error').isVisible(),true);assert.equal(await page.locator('#blog-youtube').getAttribute('aria-invalid'),'true');
+  assert.equal(await page.locator('#blog-copy-video').isDisabled(),true);assert.equal(await page.locator('#blog-open-video').isHidden(),true);assert.equal(await page.locator('#blog-open-video').getAttribute('href'),null);
   assert.equal(await page.locator('#blog-copy-body').isDisabled(),true);assert.equal(await page.locator('#blog-download-txt').isDisabled(),true);
   assert.equal(await page.locator('#blog-copy-title').isEnabled(),true);await page.locator('#blog-copy-title').click();assert.equal(await page.evaluate(()=>window.__copied),editedTitle);
   assert.equal(await page.locator('#blog-title').inputValue(),editedTitle);assert.equal(await page.locator('#blog-body').inputValue(),editedBody);
   await page.locator('#blog-youtube').fill('https://youtu.be/AbCdEf123_-?feature=shared');
   assert.equal(await page.locator('#blog-youtube-error').isHidden(),true);assert.equal(await page.locator('#blog-copy-body').isEnabled(),true);assert.equal(await page.locator('#blog-download-txt').isEnabled(),true);
+  assert.equal(await page.locator('#blog-copy-video').isEnabled(),true);assert.equal(await page.locator('#blog-open-video').getAttribute('href'),soloVideo);
   pass('An invalid optional YouTube address visibly blocks save, body copy, and TXT export while allowing independent title copy; correcting it restores body actions');
 
   await page.waitForFunction(()=>document.querySelectorAll('#blog-photos [data-photo-key]').length===3);
@@ -209,7 +234,7 @@ try{
   assert.equal(localRequests.filter(request=>request.path==='/api/admin/youtube/import').length,0);
   assert.equal(providerCalls,0);assert.equal(mediaToolCalls,0);assert.deepEqual(external,[]);assert.deepEqual(errors,[]);
   pass('Entire workflow uses no provider APIs, import requests, start jobs, video tools, external network, or existing browser session');
-  await fs.writeFile(path.join(output,'verification.json'),JSON.stringify({checks,errors,external,mockOnly:true,realNaverRequests:0,interceptedNaverOpens:naverRequests.length,realSnsRequests:0,providerCalls,mediaToolCalls,startJobRequests:0,userBrowserSessionUsed:false,screenshots:['blog-desktop.png','blog-mobile.png']},null,2));
+  await fs.writeFile(path.join(output,'verification.json'),JSON.stringify({checks,errors,external,mockOnly:true,realNaverRequests:0,interceptedNaverOpens:naverRequests.length,realYouTubeRequests:0,interceptedVideoOpens:youtubeRequests.length,realSnsRequests:0,providerCalls,mediaToolCalls,startJobRequests:0,userBrowserSessionUsed:false,screenshots:['blog-desktop.png','blog-mobile.png']},null,2));
 }finally{
   delayedJobsGet=null;releaseJobsGet?.();
   await browser?.close();await new Promise(resolve=>server.close(resolve));

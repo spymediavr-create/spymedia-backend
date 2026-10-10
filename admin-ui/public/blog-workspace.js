@@ -28,15 +28,26 @@ export function attachBlogWorkspace(getDraft){
   const contextWrap=node('label',undefined,'blog-check'),context=node('input');context.id='blog-add-context';context.type='checkbox';contextWrap.append(context,document.createTextNode('지역·촬영 종류 추가'));
   const sourceActions=node('div',undefined,'blog-actions');sourceActions.append(generate,contextWrap);
   const layout=node('div',undefined,'blog-layout'),editor=node('div',undefined,'blog-editor'),previewPanel=node('div',undefined,'blog-preview-panel');
-  function field(id,label,kind='input'){
-    const wrap=node('div',undefined,'blog-field'),l=node('label',label),input=node(kind);input.id=id;l.htmlFor=id;wrap.append(l,input);editor.append(wrap);return input;
+  function field(id,label,kind='input',container=editor){
+    const wrap=node('div',undefined,'blog-field'),l=node('label',label),input=node(kind);input.id=id;l.htmlFor=id;wrap.append(l,input);container.append(wrap);return input;
   }
   const title=field('blog-title','블로그 제목');title.maxLength=200;
   const body=field('blog-body','블로그 본문','textarea');body.rows=12;body.maxLength=5000;
   const counts=node('p','','blog-hint');counts.id='blog-counts';body.after(counts);
   const tags=field('blog-tags','해시태그');tags.placeholder='공백 또는 쉼표로 구분 · 최대 30개';
-  const youtube=field('blog-youtube','YouTube 영상 주소 (선택)');youtube.type='url';youtube.placeholder='https://www.youtube.com/watch?v=…';
+  const videoSection=node('section',undefined,'blog-video-section');videoSection.setAttribute('aria-labelledby','blog-video-heading');
+  const videoHeading=node('h3','유튜브 영상 링크');videoHeading.id='blog-video-heading';
+  videoSection.append(videoHeading,node('p','영상 파일 대신 유튜브 주소로 넣으세요. 일반 영상·Shorts·공유 주소를 사용할 수 있으며, 본문 복사와 원고 저장에 함께 포함됩니다.','blog-hint'));
+  const youtube=field('blog-youtube','유튜브 영상 주소 (선택)','input',videoSection);youtube.type='url';youtube.maxLength=2048;youtube.placeholder='https://youtu.be/… 또는 https://www.youtube.com/watch?v=…';
   const youtubeError=node('p','','blog-hint');youtubeError.id='blog-youtube-error';youtubeError.setAttribute('role','status');youtubeError.hidden=true;youtube.after(youtubeError);youtube.setAttribute('aria-describedby',youtubeError.id);
+  const importVideo=button('blog-use-shared-video','공통 영상 주소 가져오기',()=>{
+    const shared=parseYouTubeUrl(source().youtubeUrl);
+    if(!shared){feedback.textContent='상단 “유튜브 원본 링크”에 올바른 영상 주소를 먼저 입력하거나, 이곳에 영상 주소를 직접 붙여넣으세요.';return;}
+    youtube.value=shared.url;edited();feedback.textContent='공통 영상 주소를 가져왔습니다. 편집한 제목·본문·사진은 유지됩니다.';
+  });
+  const copyVideo=button('blog-copy-video','영상 링크 복사',()=>{const video=parseYouTubeUrl(youtube.value);if(video)copyText(video.url,'영상 링크');});
+  const openVideo=node('a','유튜브에서 영상 열기 ↗','outline-button');openVideo.id='blog-open-video';openVideo.target='_blank';openVideo.rel='noopener noreferrer';openVideo.hidden=true;
+  const videoActions=node('div',undefined,'blog-actions');videoActions.append(importVideo,copyVideo,openVideo);videoSection.append(videoActions,node('p','본문 전체는 “본문 복사”, 영상 주소만 따로 붙여넣으려면 “영상 링크 복사”를 누르세요.','blog-hint'));
   editor.append(node('p','영상 주소와 해시태그는 복사용 본문 끝에 붙습니다. 본문 입력 내용은 그대로 유지됩니다.','blog-hint'));
   const previewLabel=node('label','네이버에 붙여넣을 본문');previewLabel.htmlFor='blog-preview';
   const preview=node('textarea');preview.id='blog-preview';preview.readOnly=true;preview.rows=15;preview.setAttribute('aria-label','네이버에 붙여넣을 본문 미리보기');
@@ -56,7 +67,7 @@ export function attachBlogWorkspace(getDraft){
   const feedback=node('p','','blog-feedback');feedback.id='blog-feedback';feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
   const savedSection=node('section',undefined,'blog-saved'),savedHeader=node('div',undefined,'blog-heading');
   const refresh=button('blog-refresh','저장 목록 새로고침',refreshJobs);const jobList=node('div');jobList.id='blog-jobs';savedHeader.append(node('h3','저장한 블로그 원고'),refresh);savedSection.append(savedHeader,jobList);
-  root.replaceChildren(header,sourceActions,sourceNotice,layout,photoSection,saveActions,feedback,savedSection);
+  root.replaceChildren(header,sourceActions,sourceNotice,videoSection,layout,photoSection,saveActions,feedback,savedSection);
 
   function source(){
     const d=getDraft()||{};
@@ -87,6 +98,7 @@ export function attachBlogWorkspace(getDraft){
     preview.value=composeBody();counts.textContent='제목 '+title.value.length+' / 200자 · 본문 '+body.value.length+' / 5,000자 · 태그 '+tagList(tags.value).length+' / 30개';
     const invalid=invalidYouTube();youtubeError.hidden=!invalid;youtubeError.textContent=invalid?'YouTube 주소를 확인하세요. 현재 주소는 미리보기에 포함되지 않습니다. 주소를 수정하거나 지우면 본문 복사와 TXT 내려받기를 사용할 수 있습니다.':'';youtube.setAttribute('aria-invalid',String(invalid));
     copyTitle.disabled=!title.value.trim();copyBody.disabled=!canCopyBody();download.disabled=!title.value.trim()||!canCopyBody();
+    const video=parseYouTubeUrl(youtube.value);copyVideo.disabled=!video;openVideo.hidden=!video;if(video)openVideo.href=video.url;else openVideo.removeAttribute('href');
   }
   function edited(){dirty=true;engaged=true;revision++;renderPreview();if(busy)feedback.textContent='저장 시작 시점의 원고와 사진을 저장하고 있습니다. 이후 수정 내용은 다음 저장에 반영됩니다.';}
   [title,body,tags,youtube].forEach(input=>input.addEventListener('input',edited));
