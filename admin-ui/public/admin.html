@@ -1,12 +1,44 @@
 <!doctype html>
 <html lang="ko">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SNS 자동페이지 · SpyMedia</title><link rel="stylesheet" href="/admin-assets/styles.css"><link rel="stylesheet" href="/admin-assets/instagram-reels.css"><link rel="stylesheet" href="/admin-assets/instagram-publish.css"><link rel="stylesheet" href="/admin-assets/blog-workspace.css"><script src="/admin-assets/app.js" type="module"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SNS 자동페이지 · SpyMedia</title><link rel="stylesheet" href="/admin-assets/styles.css"><link rel="stylesheet" href="/admin-assets/instagram-reels.css"><link rel="stylesheet" href="/admin-assets/instagram-publish.css"><link rel="stylesheet" href="/admin-assets/blog-workspace.css"><link rel="stylesheet" href="/admin-assets/candidates.css"><script src="/admin-assets/app.js" type="module"></script></head>
 <body>
   <header class="site-header"><a href="/admin/login" class="brand"><span class="brand-mark">S</span><strong>SpyMedia</strong><span class="brand-divider"></span><span>SNS 자동페이지</span></a><div class="header-right"><span class="header-status"><i></i><span id="mode-label">상태 확인 중</span></span><a id="leave-link" href="/admin/login">로그인 화면</a><button id="logout-button" hidden type="button">로그아웃</button></div></header>
   <main class="workspace">
     <div class="page-heading"><div><span class="eyebrow">CONTENT STUDIO</span><h1>유튜브 소개와 인스타그램 게시 준비</h1><p>인스타그램 사진·릴스는 이 화면에서 게시하고, Facebook·X 유튜브 링크 소개와 블로그 원고도 함께 준비하세요.</p></div><a class="outline-button ig-helper-link" href="/admin/instagram">사진 전용 화면 ↗</a></div>
     <div class="mode-banner" role="note"><span class="info-icon">i</span><p id="mode-note">Instagram 사진·릴스를 원본으로 준비하고, 저장된 파일과 문구를 최종 확인한 뒤 직접 게시합니다. 서버 연결 상태를 확인하고 있습니다.</p></div>
-    <p class="field-hint"><a class="outline-button" href="#blogWorkspace">네이버 블로그 반자동 준비 ↓</a></p>
+    <p class="field-hint"><a class="outline-button" href="#sns-candidates">SNS 계정 후보 체크 ↓</a> <a class="outline-button" href="#blogWorkspace">네이버 블로그 반자동 준비 ↓</a></p>
+    <section id="sns-candidates" class="panel candidates" aria-labelledby="candidates-heading" tabindex="-1">
+      <div class="section-heading"><div><span class="eyebrow">ACCOUNT CHECKLIST</span><h2 id="candidates-heading">SNS 계정 후보 체크</h2></div><button id="candidates-refresh" type="button" class="outline-button" disabled>후보 새로고침</button></div>
+      <p class="candidate-hint">직접 조사한 계정을 추가하고 검토할 후보를 체크하세요. 체크·메모·상태 변경은 이 관리자에만 저장됩니다.</p>
+      <p class="candidate-notice">‘팔로우 완료 (수동 기록)’는 사용자가 SNS에서 직접 처리한 뒤 남기는 기록입니다. 실제 팔로우 여부를 자동 확인하지 않습니다.</p>
+      <p id="candidates-feedback" role="status" aria-live="polite">서버 연결 상태를 확인하고 있습니다.</p>
+      <a id="candidates-login" href="/admin/login?reason=session_expired" hidden>다시 로그인</a>
+      <div class="candidate-tabs" role="group" aria-label="후보 SNS"><button type="button" data-candidate-platform="instagram" aria-pressed="true">Instagram</button><button type="button" data-candidate-platform="facebook" aria-pressed="false">Facebook</button><button type="button" data-candidate-platform="x" aria-pressed="false">X</button><button type="button" data-candidate-platform="blog" aria-pressed="false">네이버 블로그</button></div>
+      <details id="candidate-editor"><summary id="candidate-editor-title">후보 추가</summary>
+        <form id="candidate-form">
+          <div class="candidate-fields">
+            <label>SNS<select id="candidate-platform" required><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="x">X</option><option value="blog">네이버 블로그</option></select></label>
+            <label>계정/기관·업체명 *<input id="candidate-accountName" maxlength="120" required autocomplete="off"></label>
+            <label class="candidate-wide">프로필 URL *<input id="candidate-profileUrl" type="url" maxlength="2048" required placeholder="https://www.instagram.com/account/" autocomplete="off" aria-describedby="candidate-url-help"></label>
+            <label>업종<input id="candidate-industry" maxlength="100" list="candidate-industries" placeholder="기본 선택 또는 여행사 등 직접 입력"></label><label>지역<input id="candidate-region" maxlength="100" list="candidate-regions" placeholder="인천, 시흥, 영흥도 또는 직접 입력"></label>
+            <label class="candidate-wide">추천 이유<textarea id="candidate-reason" maxlength="1000" rows="2"></textarea></label>
+            <label class="candidate-wide">메모<textarea id="candidate-note" maxlength="2000" rows="3"></textarea></label>
+          </div>
+          <p id="candidate-url-help" class="candidate-hint">선택한 SNS의 HTTPS 프로필 주소만 받습니다. Facebook은 사용자명·숫자 ID·profile.php?id= 주소, 네이버는 블로그 홈 주소를 사용하세요.</p>
+          <div class="candidate-actions"><button id="candidate-save" type="submit" class="outline-button" disabled>후보 저장</button><button id="candidate-cancel" type="button" class="text-button">편집 취소</button></div>
+        </form>
+      </details>
+      <datalist id="candidate-industries"><option value="공공기관·지자체"><option value="부동산"><option value="영상제작"><option value="건설"><option value="행사기획·운영"><option value="기타"></datalist>
+      <datalist id="candidate-regions"><option value="인천"><option value="시흥"><option value="영흥도"></datalist>
+      <form id="candidates-filter" class="candidate-filter"><label>저장 후보 검색 <input id="candidates-query" maxlength="200" placeholder="여행사 등 업종·키워드"></label><label>처리 상태 <select id="candidates-status"><option value="all">전체 상태</option><option value="pending">검토 중</option><option value="excluded">제외</option><option value="done">팔로우 완료 (수동 기록)</option></select></label><label>업종 <input id="candidates-industry" maxlength="100" list="candidate-industries" placeholder="전체 업종 · 직접 입력 가능"></label><label>지역 <input id="candidates-region" maxlength="100" list="candidate-regions" placeholder="인천, 시흥, 영흥도 등"></label><button type="submit" class="outline-button">필터 적용</button><span id="candidates-count"></span></form>
+      <p class="candidate-hint">저장 후보 검색은 계정/기관·업체명·업종·지역·추천 이유·메모·프로필 주소에서 찾습니다. 업종 필터는 일치, 지역·키워드는 포함 검색입니다.</p>
+      <p class="candidate-hint">새 계정 조사: <a id="candidates-external" target="_blank" rel="noopener noreferrer" hidden>외부 검색 열기 ↗</a><span id="candidates-external-empty">먼저 검색어를 입력하세요.</span> Google을 새 창에서 엽니다. 검색 결과는 관리자에 수집·저장되지 않으며, 확인한 프로필 주소를 직접 추가하세요.</p>
+      <div class="candidate-actions"><label class="candidate-check"><input id="candidates-all" type="checkbox" disabled>이 페이지 전체 선택</label><span id="candidates-selection">이 페이지 0개 선택</span></div>
+      <p class="candidate-hint">개별 체크와 전체 선택은 즉시 저장됩니다. 아래 일괄 상태 변경은 현재 페이지에서 체크한 후보에 적용됩니다.</p>
+      <div class="candidate-actions"><button id="candidates-exclude" type="button" class="outline-button" disabled>선택 후보 제외</button><button id="candidates-done" type="button" class="outline-button" disabled>선택 후보 팔로우 완료 (수동 기록)</button><button id="candidates-pending" type="button" class="outline-button" disabled>선택 후보 검토 중으로</button></div>
+      <div id="candidates-list"><p class="candidate-empty">후보 목록을 불러오기 전입니다.</p></div>
+      <div class="candidate-actions"><button id="candidates-prev" type="button" class="outline-button" disabled>이전 후보</button><span id="candidates-range">0개</span><button id="candidates-next" type="button" class="outline-button" disabled>다음 후보</button></div>
+    </section>
     <section class="media-grid" aria-label="미디어 선택">
       <article class="panel youtube-panel" aria-labelledby="youtube-heading"><div class="section-heading"><h2 id="youtube-heading"><span class="section-number">01</span>유튜브 원본 링크</h2><span class="quiet-label">본편은 YouTube에 업로드</span></div><p class="field-hint">주소로 제목·설명·썸네일을 가져옵니다. 본편 영상 파일은 이 화면에서 받지 않습니다.</p><label for="youtube-url">유튜브 영상 주소</label><div class="url-entry"><input id="youtube-url" type="url" maxlength="2048" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off"><button id="import-youtube" type="button" class="outline-button" disabled>유튜브 정보 가져오기</button></div><p id="youtube-feedback" class="field-error" role="status" aria-live="polite"></p><div id="import-result" class="import-result" hidden></div></article>
       <article class="panel upload-panel" id="image-drop"><div class="section-heading"><h2><span class="section-number">02</span>소개 사진</h2><span class="quiet-label">JPG · PNG · WebP</span></div><p class="field-hint">썸네일·추가 사진은 블로그 자료로 보관합니다. FB·X 링크 카드의 이미지는 해당 플랫폼이 결정합니다.</p><div id="imported-photo" class="imported-photo" hidden></div><label for="image-input" class="drop-zone" tabindex="0"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="6" width="30" height="28" rx="3"/><circle cx="15" cy="15" r="3"/><path d="m7 30 10-10 7 7 5-5 6 6"/></svg><span>이미지를 끌어 놓거나 선택하세요</span><span class="choose-button">이미지 선택</span><small>최대 10장 · 한 장당 8MB · 4096px·1600만 픽셀 이하</small></label><input class="visually-hidden" id="image-input" type="file" accept="image/jpeg,image/png,image/webp" multiple><div id="image-files" class="file-area"></div><p id="image-error" class="field-error" role="alert"></p></article>

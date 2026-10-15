@@ -7,6 +7,7 @@ const {Media} = require('./media.cjs');
 const {Jobs} = require('./jobs.cjs');
 const {Connectors} = require('./connectors.cjs');
 const {Catalog} = require('./catalog.cjs');
+const {Candidates} = require('./candidates.cjs');
 const {Photos}=require('./photos.cjs');
 const {Reels,LIMIT:REEL_LIMIT}=require('./reels.cjs');
 const {YouTubeSource}=require('./youtube-source.cjs');
@@ -17,6 +18,7 @@ class Service {
     this.connectors=options.connectors||new Connectors(this.settings,{mediaUrl:asset=>this.signedUrl(asset)});
     this.jobs=new Jobs(this.settings,this.store,this.media,this.connectors);
     this.catalog=new Catalog(this.store,this.jobs);
+    this.candidates=new Candidates(this.store);
     this.photos=options.photos||new Photos(this.store);
     this.reels=options.reels||new Reels(this.settings,this.store);
     this.youtubeSource=options.youtubeSource||new YouTubeSource(this.settings,this.photos);

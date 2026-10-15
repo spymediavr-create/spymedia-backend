@@ -38,9 +38,12 @@ class Store {
       catch(e){if(process.platform!=='win32'||!['EPERM','EACCES','EBUSY'].includes(e.code)||attempt>=9)throw e;await new Promise(resolve=>setTimeout(resolve,(attempt+1)*10));}
     }
   }
-  async transaction(fn) {
+  async transaction(fn, rollback) {
     await this.init();
-    const operation = this.tail.then(async () => { const value = await fn(this.state); await this.save(); return value; });
+    const operation = this.tail.then(async () => {
+      try { const value = await fn(this.state); await this.save(); return value; }
+      catch (e) { if (rollback) rollback(this.state); throw e; }
+    });
     this.tail = operation.catch(()=>{}); return operation;
   }
   file(id, converted = false) { if (!ID.test(id)) throw error(404,'not_found'); return path.join(this.root,converted ? 'converted' : 'originals',id); }

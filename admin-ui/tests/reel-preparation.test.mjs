@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { File as BufferFile } from 'node:buffer';
 import { MAX_REEL_BYTES, readContainerInfo, metadataFromProbe, validateVideo, audioCompliant,
   validatePreparedMetadata, validateTiming, preparationArgs, validateSourceFile, prepareReel } from '../public/reel-preparation.js';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { validateReelMetadata } = require('../backend/reels.cjs');
+// Browser File exists globally in Node 20+, but Node 18 exposes it via node:buffer.
+globalThis.File ??= BufferFile;
 
 function box(type, ...parts) {
   const bytes = Buffer.concat(parts), head = Buffer.alloc(8);

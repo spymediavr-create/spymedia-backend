@@ -4,6 +4,7 @@ import {attachServerUI} from './server-ui.js';
 import {attachInstagramPhoto} from './instagram-publish.js';
 import {attachInstagramReels} from './instagram-reels.js';
 import {attachInstagramSuite} from './instagram-suite.js';
+import {attachCandidates} from './candidates-ui.js';
 import {attachBlogWorkspace} from './blog-workspace.js';
 const $=selector=>document.querySelector(selector);
 const state={images:[],tags:[],suggestions:[],channels:new Set(['facebook','blog']),active:'facebook',importedPhoto:null,pending:null,xEdited:false};
@@ -179,6 +180,7 @@ try{
   const r=await fetch('/api/admin/status',{cache:'no-store'});if(!r.ok)throw Error();backendStatus=await r.json();const preview=backendStatus.mode==='preview';
   if(!preview&&!backendStatus.authenticated)location.replace('/admin/login?reason=session_expired');
   blogWorkspace.setStatus(backendStatus);
+  attachCandidates(backendStatus);
   $('#mode-label').textContent=preview?'로컬 미리보기':'관리자 세션';$('#mode-note').textContent=preview?'로컬 미리보기입니다. 파일과 문구를 검토할 수 있으며 서버 저장과 실제 게시에는 관리자 로그인이 필요합니다.':'Instagram 사진·릴스는 저장한 원본과 문구를 확인한 뒤 이 화면에서 게시합니다. Facebook·X 링크 소개와 블로그 원고도 함께 준비할 수 있습니다.';
   $('#import-youtube').disabled=!backendStatus.authenticated||!backendStatus.youtubeImportReady;
   $('#leave-link').hidden=!preview;$('#logout-button').hidden=preview;
