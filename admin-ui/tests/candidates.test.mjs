@@ -110,7 +110,7 @@ test('SNS, industry, partial region and status filters combine and pages do not 
   const construction=await f.candidates.create({...input('instagram','build'),industry:'건설',region:'시흥시'});
   const island=await f.candidates.create({...input('instagram','island'),industry:'공공기관·지자체',region:'영흥도'});
   await f.candidates.update(island.id,{revision:1,selected:true});
-  const combined=await f.candidates.list({platform:'instagram',industry:'공공기관·지자체',region:'인천'});assert.equal(combined.total,1);assert.equal(combined.items[0].region,'인천시');
+  const combined=await f.candidates.list({platform:'instagram',industry:'공공기관·지자체',region:'인천'});assert.equal(combined.total,2);assert.deepEqual(new Set(combined.items.map(item=>item.region)),new Set(['인천시','영흥도']));
   assert.equal((await f.candidates.list({platform:'facebook',industry:'건설'})).total,0);
   assert.equal((await f.candidates.list({industry:'건설',region:'시흥'})).items[0].id,construction.id);
   assert.equal((await f.candidates.list({region:'영흥도'})).items[0].industry,'공공기관·지자체');

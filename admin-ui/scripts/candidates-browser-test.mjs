@@ -10,10 +10,11 @@ import {config} from '../backend/config.cjs';
 import {Store} from '../backend/store.cjs';
 import {Service} from '../backend/service.cjs';
 import {createAdminHandler} from '../server-core.cjs';
+import {REGION_OPTIONS,CURRENT_PROVINCES,LEGACY_AREAS} from '../public/candidate-regions.js';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE||'playwright');
 const dir=await fs.mkdtemp(path.join(os.tmpdir(),'spymedia-candidates-browser-'));
 const output=fileURLToPath(new URL('../test-results/candidates/',import.meta.url));await fs.mkdir(output,{recursive:true});
-const checks=[],errors=[],external=[],opened=[],writes=[];const pass=text=>{checks.push(text);console.log('PASS '+text);};
+const checks=[],errors=[],external=[],opened=[],writes=[],regionQueries=[];const pass=text=>{checks.push(text);console.log('PASS '+text);};
 let providerCalls=0,mediaCalls=0,browser,server,failMutation=null,failRead=false;
 const forbidden=async()=>{providerCalls++;throw Error('External SNS calls prohibited');};
 const settings=config({SNS_DATA_DIR:dir,SNS_STORAGE_PERSISTENCE:'confirmed',SNS_SINGLE_INSTANCE:'confirmed',SNS_PUBLISH_ENABLED:'false'}),store=new Store(settings);
@@ -27,6 +28,7 @@ try{
   await context.route('**/*',async route=>{
     const req=route.request(),url=new URL(req.url());
     if(url.origin===origin){
+      if(req.method()==='GET'&&url.pathname==='/api/admin/candidates')regionQueries.push(url.searchParams.get('region'));
       if(req.method()==='PATCH'&&url.pathname.startsWith('/api/admin/candidates/')&&failMutation)return route.fulfill({status:failMutation,contentType:'application/json',body:JSON.stringify({error:failMutation===401?'authentication_required':'storage_unavailable'})});
       if(req.method()==='GET'&&url.pathname==='/api/admin/candidates'&&failRead)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'storage_unavailable'})});
       return route.continue();
@@ -55,12 +57,14 @@ try{
     await page.locator('#candidate-save').click();await idle();assert.match(await feedback(),/저장했습니다/);
   };
   await page.goto(origin+'/admin/login');await page.locator('#login-id').fill('fixture');await page.locator('#login-password').fill(password);await page.locator('#login-submit').click();await page.waitForURL(origin+'/admin');await idle();
-  assert.equal(await page.locator('.candidate-card').count(),0);assert.match(await page.locator('#candidates-list').textContent(),/후보가 없습니다/);assert.equal(Object.keys(store.state.candidates||{}).length,0);
+  assert.equal(await page.locator('.candidate-card').count(),0);assert.match(await page.locator('#candidates-list').textContent(),/후보가 없습니다/);assert.equal(Object.keys(store.state.candidates||{}).length,0);assert.equal(await page.locator('#candidates-pages button').count(),0);assert.match(await page.locator('#candidates-range').textContent(),/0\/0페이지/);assert.equal(await page.locator('#candidates-prev').isDisabled(),true);assert.equal(await page.locator('#candidates-next').isDisabled(),true);
   assert.match(await page.locator('.candidate-notice').textContent(),/자동 확인하지 않습니다/);
   assert.deepEqual(await page.locator('#candidate-industries option').evaluateAll(items=>items.map(i=>i.value)),['공공기관·지자체','부동산','영상제작','건설','행사기획·운영','기타']);
-  assert.deepEqual(await page.locator('#candidate-regions option').evaluateAll(items=>items.map(i=>i.value)),['인천','시흥','영흥도']);
-  pass('Empty default, six industry suggestions, custom industry input and separate Incheon/Siheung/Yeongheung region choices');
+  assert.deepEqual(await page.locator('#candidate-regions option').evaluateAll(items=>items.map(i=>i.value)),REGION_OPTIONS);
+  for(const area of [...CURRENT_PROVINCES,...LEGACY_AREAS])assert.ok(REGION_OPTIONS.includes(area.name));
+  pass('Empty default, custom industries, nationwide, all current/legacy province choices, six area groups and existing localities');
   await create({name:'합성 여행사 <script>window.injected=1</script>',url:'https://instagram.com/fixture_agency/?igsh=synthetic',industry:'여행사',note:'여행사 & 드론 + #제주'});
+  assert.equal(await page.locator('#candidates-pages button').count(),1);assert.equal(await page.locator('#candidates-pages [aria-current=page]').textContent(),'1');assert.equal(await page.locator('#candidates-next').isDisabled(),true);
   await create({name:'합성 영흥도 기관',url:'https://www.instagram.com/fixture_island/',region:'영흥도'});
   await create({name:'합성 시흥 건설업체',url:'https://www.instagram.com/fixture_build/',region:'시흥시',industry:'건설'});
   assert.equal(await page.locator('.candidate-card').count(),3);assert.equal(await page.evaluate(()=>window.injected),undefined);assert.equal(await page.locator('.candidate-card script').count(),0);
@@ -100,12 +104,42 @@ try{
   failRead=true;await platform('x');assert.equal(await page.locator('.candidate-card').count(),0);assert.equal(await page.locator('#candidates-all').isDisabled(),true);failRead=false;await page.locator('#candidates-refresh').click();await idle();assert.equal(await page.locator('.candidate-card').count(),1);
   await platform('instagram');
   pass('Four SNS lists, canonical duplicate rejection and empty filter/load-error states preserve other platforms');
-  for(let i=0;i<25;i++)await service.candidates.create({platform:'instagram',accountName:'페이지 fixture '+i,profileUrl:'https://www.instagram.com/page_fixture_'+i+'/',industry:'기타',region:'합성 지역'});
-  await page.locator('#candidates-refresh').click();await idle();assert.equal(await page.locator('.candidate-card').count(),25);await page.locator('#candidates-next').click();await idle();assert.equal(await page.locator('.candidate-card').count(),3);
-  await page.locator('#candidates-prev').click();await idle();await filter({region:'영흥도'});
+  const seedPage=async i=>service.candidates.create({platform:'instagram',accountName:'페이지 fixture '+i,profileUrl:'https://www.instagram.com/page_fixture_'+i+'/',industry:'기타',region:'합성 지역'});
+  for(let i=0;i<18;i++){
+    await seedPage(i);
+    if([6,7,16,17].includes(i)){
+      const total=i+4,pages=Math.ceil(total/10);await page.locator('#candidates-refresh').click();await idle();
+      assert.equal(await page.locator('.candidate-card').count(),10);assert.equal(await page.locator('#candidates-pages button').count(),pages);assert.match(await page.locator('#candidates-range').textContent(),new RegExp('1/'+pages+'페이지'));
+      if(pages>1){await page.getByRole('button',{name:pages+'페이지',exact:true}).click();await idle();assert.equal(await page.locator('.candidate-card').count(),((total-1)%10)+1);assert.equal(await page.locator('#candidates-next').isDisabled(),true);await page.getByRole('button',{name:'1페이지',exact:true}).click();await idle();}
+    }
+  }
+  const selectedCard=page.locator('.candidate-card').first(),selectedId=await selectedCard.getAttribute('data-candidate-id');await selectedCard.getByRole('checkbox').check();await idle();
+  await page.getByRole('button',{name:'2페이지',exact:true}).click();await idle();await page.getByRole('button',{name:'1페이지',exact:true}).click();await idle();assert.equal(await page.locator('[data-candidate-id="'+selectedId+'"] input[type=checkbox]').isChecked(),true);
+  await page.reload();await idle();assert.equal(await page.locator('[data-candidate-id="'+selectedId+'"] input[type=checkbox]').isChecked(),true);
+  for(let i=18;i<77;i++)await seedPage(i);
+  await page.locator('#candidates-refresh').click();await idle();await page.getByRole('button',{name:'4페이지',exact:true}).click();await idle();assert.ok((await page.locator('#candidates-pages').textContent()).includes('…'));assert.ok(await page.locator('#candidates-pages button').count()<=7);
+  for(const width of [390,360]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('.candidate-pages').screenshot({path:path.join(output,'page-numbers-'+width+'.png')});}
+  await page.getByRole('button',{name:'8페이지',exact:true}).click();await idle();assert.equal(await page.locator('#candidates-next').isDisabled(),true);
+  for(let i=0;i<21;i++)await service.candidates.create({platform:'instagram',accountName:'마지막 페이지 '+i,profileUrl:'https://instagram.com/last_page_'+i+'/',region:'범위 테스트'});
+  await filter({region:'범위 테스트',status:'pending'});await page.getByRole('button',{name:'3페이지',exact:true}).click();await idle();await page.locator('#candidates-all').check();await idle();await page.locator('#candidates-exclude').click();await idle();assert.equal(await page.locator('.candidate-card').count(),10);assert.equal(await page.locator('#candidates-pages [aria-current=page]').textContent(),'2');assert.match(await page.locator('#candidates-range').textContent(),/2\/2페이지/);
+  await filter({region:'영흥도'});assert.equal(await page.locator('#candidates-pages [aria-current=page]').textContent(),'1');assert.match(await page.locator('#candidates-range').textContent(),/1\/1페이지/);
+  await filter({q:'없는 합성 검색어'});assert.equal(await page.locator('#candidates-pages button').count(),0);assert.equal(await page.locator('#candidates-prev').isDisabled(),true);assert.equal(await page.locator('#candidates-next').isDisabled(),true);
+  await filter({region:'영흥도'});
   for(const width of [390,360]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#sns-candidates').screenshot({path:path.join(output,'mobile-'+width+'.png')});}
   await page.setViewportSize({width:1440,height:1100});await page.locator('#sns-candidates').screenshot({path:path.join(output,'desktop.png')});
-  pass('25-row pagination and 360/390px mobile layouts have no horizontal overflow');
+  pass('0/1/10/11/20/21 item boundaries, ten-row pages, numeric/previous/next controls, persisted checks, filter reset and 360/390px ellipses fit');
+  for(const [i,region]of ['전라북도 전주시','충남 천안시','대전광역시','','제주도'].entries())await service.candidates.create({platform:'instagram',accountName:'지역 호환 합성 '+i,profileUrl:'https://www.instagram.com/region_check_'+i+'/',industry:'여행사',region});
+  await filter({region:'전국',industry:'여행사'});assert.equal(await page.locator('.candidate-card').count(),6);assert.ok(await row('지역 호환 합성 3').count());assert.equal(regionQueries.at(-1),'');
+  await page.locator('#candidates-query').fill('여행사 & 드론 + #지역');
+  const nationwideUrl=new URL(await page.locator('#candidates-external').getAttribute('href'));assert.equal(nationwideUrl.searchParams.get('q'),'여행사 & 드론 + #지역 site:instagram.com');
+  await filter({region:'충청도',industry:'여행사'});assert.equal(await page.locator('.candidate-card').count(),2);assert.equal(regionQueries.at(-1),'충청도');
+  await page.locator('#candidates-query').fill('여행사');const groupUrl=new URL(await page.locator('#candidates-external').getAttribute('href'));assert.match(groupUrl.searchParams.get('q'),/충북 OR 충남 OR 대전 OR 세종/);
+  await filter({region:'전북특별자치도',q:'전라북도'});assert.equal(await page.locator('.candidate-card').count(),1);assert.ok(await row('지역 호환 합성 0').count());
+  await row('지역 호환 합성 0').getByRole('button',{name:'정보·메모 수정'}).click();assert.equal(await page.locator('#candidate-region').inputValue(),'전라북도 전주시');await page.locator('#candidate-cancel').click();
+  await filter({region:'제주특별자치도'});assert.equal(await page.locator('.candidate-card').count(),1);
+  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#sns-candidates').screenshot({path:path.join(output,'regions-mobile-390.png')});
+  await page.reload();await idle();await filter({region:'전라도'});assert.equal(await page.locator('.candidate-card').count(),1);await filter({region:'영흥도'});
+  pass('Nationwide sends no region restriction; regional groups, official/old names, unknown regions and external search terms work without rewriting saved text');
   await row('합성 영흥도').getByRole('button',{name:'정보·메모 수정'}).click();await page.locator('#candidate-note').fill('만료 시 보존할 메모');failMutation=401;await page.locator('#candidate-save').click();await page.waitForFunction(()=>!document.getElementById('candidates-login').hidden);
   assert.equal(await page.locator('#candidate-note').inputValue(),'만료 시 보존할 메모');assert.equal(await page.locator('#candidate-save').isDisabled(),true);assert.equal(await page.locator('#prepare-server').isDisabled(),true);failMutation=null;
   pass('Authentication expiry disables writes, preserves the draft and offers re-login');

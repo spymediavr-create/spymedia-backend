@@ -11,6 +11,8 @@ const assets = new Map(['styles.css', 'app.js', 'login.js', 'domain.js', 'youtub
 assets.set('/admin-assets/reel-preparation.js', 'reel-preparation.js');
 assets.set('/admin-assets/candidates-ui.js', 'candidates-ui.js');
 assets.set('/admin-assets/candidates.css', 'candidates.css');
+assets.set('/admin-assets/candidate-regions.js', 'candidate-regions.js');
+assets.set('/admin-assets/candidate-pagination.js', 'candidate-pagination.js');
 // Serve only the browser runtime's known files, never expose node_modules as a directory.
 const vendorAssets = new Map();
 for (const file of ['index.js','classes.js','const.js','errors.js','types.js','utils.js','worker.js']) {
@@ -129,7 +131,7 @@ function createAdminHandler(options = {}) {
         }else if(route==='/api/admin/candidates'&&req.method==='GET'){
           const keys=[...url.searchParams.keys()];
           if(keys.some(key=>!['platform','status','industry','region','q','offset','limit'].includes(key))||new Set(keys).size!==keys.length)throw Object.assign(new Error(),{status:400,code:'invalid_candidate_query'});
-          json(res,200,await service.candidates.list({platform:url.searchParams.get('platform')??'instagram',status:url.searchParams.get('status')??'all',industry:url.searchParams.get('industry')??'',region:url.searchParams.get('region')??'',q:url.searchParams.get('q')??'',offset:Number(url.searchParams.get('offset')??0),limit:Number(url.searchParams.get('limit')??25)}));
+          json(res,200,await service.candidates.list({platform:url.searchParams.get('platform')??'instagram',status:url.searchParams.get('status')??'all',industry:url.searchParams.get('industry')??'',region:url.searchParams.get('region')??'',q:url.searchParams.get('q')??'',offset:Number(url.searchParams.get('offset')??0),limit:Number(url.searchParams.get('limit')??10)}));
         }else if(route==='/api/admin/candidates'&&req.method==='POST'&&!url.search){
           json(res,201,{candidate:await service.candidates.create(await readJson(req))});
         }else if(route==='/api/admin/candidates/batch'&&req.method==='POST'&&!url.search){

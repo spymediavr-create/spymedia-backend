@@ -20,7 +20,7 @@
             <label>SNS<select id="candidate-platform" required><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="x">X</option><option value="blog">네이버 블로그</option></select></label>
             <label>계정/기관·업체명 *<input id="candidate-accountName" maxlength="120" required autocomplete="off"></label>
             <label class="candidate-wide">프로필 URL *<input id="candidate-profileUrl" type="url" maxlength="2048" required placeholder="https://www.instagram.com/account/" autocomplete="off" aria-describedby="candidate-url-help"></label>
-            <label>업종<input id="candidate-industry" maxlength="100" list="candidate-industries" placeholder="기본 선택 또는 여행사 등 직접 입력"></label><label>지역<input id="candidate-region" maxlength="100" list="candidate-regions" placeholder="인천, 시흥, 영흥도 또는 직접 입력"></label>
+            <label>업종<input id="candidate-industry" maxlength="100" list="candidate-industries" placeholder="기본 선택 또는 여행사 등 직접 입력"></label><label>지역<input id="candidate-region" maxlength="100" list="candidate-regions" placeholder="전국·시도·권역 선택 또는 직접 입력"></label>
             <label class="candidate-wide">추천 이유<textarea id="candidate-reason" maxlength="1000" rows="2"></textarea></label>
             <label class="candidate-wide">메모<textarea id="candidate-note" maxlength="2000" rows="3"></textarea></label>
           </div>
@@ -29,15 +29,17 @@
         </form>
       </details>
       <datalist id="candidate-industries"><option value="공공기관·지자체"><option value="부동산"><option value="영상제작"><option value="건설"><option value="행사기획·운영"><option value="기타"></datalist>
-      <datalist id="candidate-regions"><option value="인천"><option value="시흥"><option value="영흥도"></datalist>
-      <form id="candidates-filter" class="candidate-filter"><label>저장 후보 검색 <input id="candidates-query" maxlength="200" placeholder="여행사 등 업종·키워드"></label><label>처리 상태 <select id="candidates-status"><option value="all">전체 상태</option><option value="pending">검토 중</option><option value="excluded">제외</option><option value="done">팔로우 완료 (수동 기록)</option></select></label><label>업종 <input id="candidates-industry" maxlength="100" list="candidate-industries" placeholder="전체 업종 · 직접 입력 가능"></label><label>지역 <input id="candidates-region" maxlength="100" list="candidate-regions" placeholder="인천, 시흥, 영흥도 등"></label><button type="submit" class="outline-button">필터 적용</button><span id="candidates-count"></span></form>
-      <p class="candidate-hint">저장 후보 검색은 계정/기관·업체명·업종·지역·추천 이유·메모·프로필 주소에서 찾습니다. 업종 필터는 일치, 지역·키워드는 포함 검색입니다.</p>
+      <datalist id="candidate-regions"></datalist>
+      <form id="candidates-filter" class="candidate-filter"><label>저장 후보 검색 <input id="candidates-query" maxlength="200" placeholder="여행사 등 업종·키워드"></label><label>처리 상태 <select id="candidates-status"><option value="all">전체 상태</option><option value="pending">검토 중</option><option value="excluded">제외</option><option value="done">팔로우 완료 (수동 기록)</option></select></label><label>업종 <input id="candidates-industry" maxlength="100" list="candidate-industries" placeholder="전체 업종 · 직접 입력 가능"></label><label>지역 <input id="candidates-region" maxlength="100" list="candidate-regions" placeholder="전국·충청도·제주도 등"></label><button type="submit" class="outline-button">필터 적용</button><span id="candidates-count"></span></form>
+      <p class="candidate-hint">저장 후보 검색은 계정/기관·업체명·업종·지역·추천 이유·메모·프로필 주소에서 찾습니다. 업종 필터는 일치, 지역은 전국·권역·시도 약칭과 자유 입력을 지원하고, 키워드는 포함 검색입니다.</p>
+      <p class="candidate-hint">전국 또는 빈 지역은 지역 제한 없이 검색합니다. 권역은 명시된 시도·권역명과 기존 시흥·영흥도를 기준으로 찾으며, 지역 미입력 후보의 위치는 추정하지 않습니다.</p>
       <p class="candidate-hint">새 계정 조사: <a id="candidates-external" target="_blank" rel="noopener noreferrer" hidden>외부 검색 열기 ↗</a><span id="candidates-external-empty">먼저 검색어를 입력하세요.</span> Google을 새 창에서 엽니다. 검색 결과는 관리자에 수집·저장되지 않으며, 확인한 프로필 주소를 직접 추가하세요.</p>
       <div class="candidate-actions"><label class="candidate-check"><input id="candidates-all" type="checkbox" disabled>이 페이지 전체 선택</label><span id="candidates-selection">이 페이지 0개 선택</span></div>
       <p class="candidate-hint">개별 체크와 전체 선택은 즉시 저장됩니다. 아래 일괄 상태 변경은 현재 페이지에서 체크한 후보에 적용됩니다.</p>
       <div class="candidate-actions"><button id="candidates-exclude" type="button" class="outline-button" disabled>선택 후보 제외</button><button id="candidates-done" type="button" class="outline-button" disabled>선택 후보 팔로우 완료 (수동 기록)</button><button id="candidates-pending" type="button" class="outline-button" disabled>선택 후보 검토 중으로</button></div>
       <div id="candidates-list"><p class="candidate-empty">후보 목록을 불러오기 전입니다.</p></div>
-      <div class="candidate-actions"><button id="candidates-prev" type="button" class="outline-button" disabled>이전 후보</button><span id="candidates-range">0개</span><button id="candidates-next" type="button" class="outline-button" disabled>다음 후보</button></div>
+      <nav class="candidate-pages" aria-label="후보 페이지 이동"><div id="candidates-pages"></div></nav>
+      <div class="candidate-actions"><button id="candidates-prev" type="button" class="outline-button" disabled>이전 후보</button><span id="candidates-range">0개 · 0/0페이지</span><button id="candidates-next" type="button" class="outline-button" disabled>다음 후보</button></div>
     </section>
     <section class="media-grid" aria-label="미디어 선택">
       <article class="panel youtube-panel" aria-labelledby="youtube-heading"><div class="section-heading"><h2 id="youtube-heading"><span class="section-number">01</span>유튜브 원본 링크</h2><span class="quiet-label">본편은 YouTube에 업로드</span></div><p class="field-hint">주소로 제목·설명·썸네일을 가져옵니다. 본편 영상 파일은 이 화면에서 받지 않습니다.</p><label for="youtube-url">유튜브 영상 주소</label><div class="url-entry"><input id="youtube-url" type="url" maxlength="2048" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off"><button id="import-youtube" type="button" class="outline-button" disabled>유튜브 정보 가져오기</button></div><p id="youtube-feedback" class="field-error" role="status" aria-live="polite"></p><div id="import-result" class="import-result" hidden></div></article>

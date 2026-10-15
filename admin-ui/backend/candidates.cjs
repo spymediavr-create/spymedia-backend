@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const {ID} = require('./store.cjs');
 const {error} = require('./errors.cjs');
+const regions = import('../public/candidate-regions.js');
 const PLATFORMS = ['instagram', 'facebook', 'x', 'blog'];
 const STATUSES = ['pending', 'excluded', 'done'];
 const LIMITS = {accountName:120, industry:100, region:100, reason:1000, note:2000};
@@ -77,7 +78,7 @@ class Candidates {
       if (started) { if (present) state.candidates = previous; else delete state.candidates; }
     });
   }
-  async list({platform='instagram',status='all',industry='',region='',q='',offset=0,limit=25}={}) {
+  async list({platform='instagram',status='all',industry='',region='',q='',offset=0,limit=10}={}) {
     if (!PLATFORMS.includes(platform) || !['all',...STATUSES].includes(status) || !Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw error(400,'invalid_candidate_query');
     try {
       industry = text(industry,100).toLocaleLowerCase('ko');
@@ -86,7 +87,8 @@ class Candidates {
     } catch { throw error(400,'invalid_candidate_query'); }
     await this.store.init();
     await this.store.tail;
-    const records = Object.values(this.store.state.candidates || {}).filter(item => item.platform === platform && (status === 'all' || item.status === status) && (!industry || item.industry.toLocaleLowerCase('ko') === industry) && (!region || item.region.toLocaleLowerCase('ko').includes(region)) && (!q || ['accountName','industry','region','reason','note','profileUrl'].some(key => item[key].toLocaleLowerCase('ko').includes(q)))).sort((a,b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+    const {matchesRegion,matchesRegionKeyword}=await regions;
+    const records = Object.values(this.store.state.candidates || {}).filter(item => item.platform === platform && (status === 'all' || item.status === status) && (!industry || item.industry.toLocaleLowerCase('ko') === industry) && matchesRegion(item.region,region) && (!q || (['accountName','industry','region','reason','note','profileUrl'].some(key => item[key].toLocaleLowerCase('ko').includes(q)) || matchesRegionKeyword(item.region,q)))).sort((a,b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
     return {platform,status,industry,region,q,total:records.length,selectedCount:records.filter(item=>item.selected).length,offset,limit,items:records.slice(offset,offset+limit)};
   }
   async create(body) {
