@@ -1,12 +1,26 @@
 <!doctype html>
 <html lang="ko">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SNS 자동페이지 · SpyMedia</title><link rel="stylesheet" href="/admin-assets/styles.css"><link rel="stylesheet" href="/admin-assets/instagram-reels.css"><link rel="stylesheet" href="/admin-assets/instagram-publish.css"><link rel="stylesheet" href="/admin-assets/blog-workspace.css"><link rel="stylesheet" href="/admin-assets/candidates.css"><script src="/admin-assets/app.js" type="module"></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SNS 자동페이지 · SpyMedia</title><link rel="stylesheet" href="/admin-assets/styles.css"><link rel="stylesheet" href="/admin-assets/instagram-reels.css"><link rel="stylesheet" href="/admin-assets/instagram-publish.css"><link rel="stylesheet" href="/admin-assets/blog-workspace.css"><link rel="stylesheet" href="/admin-assets/candidates.css"><link rel="stylesheet" href="/admin-assets/temporary-search.css"><script src="/admin-assets/app.js" type="module"></script></head>
 <body>
   <header class="site-header"><a href="/admin/login" class="brand"><span class="brand-mark">S</span><strong>SpyMedia</strong><span class="brand-divider"></span><span>SNS 자동페이지</span></a><div class="header-right"><span class="header-status"><i></i><span id="mode-label">상태 확인 중</span></span><a id="leave-link" href="/admin/login">로그인 화면</a><button id="logout-button" hidden type="button">로그아웃</button></div></header>
   <main class="workspace">
     <div class="page-heading"><div><span class="eyebrow">CONTENT STUDIO</span><h1>유튜브 소개와 인스타그램 게시 준비</h1><p>인스타그램 사진·릴스는 이 화면에서 게시하고, Facebook·X 유튜브 링크 소개와 블로그 원고도 함께 준비하세요.</p></div><a class="outline-button ig-helper-link" href="/admin/instagram">사진 전용 화면 ↗</a></div>
     <div class="mode-banner" role="note"><span class="info-icon">i</span><p id="mode-note">Instagram 사진·릴스를 원본으로 준비하고, 저장된 파일과 문구를 최종 확인한 뒤 직접 게시합니다. 서버 연결 상태를 확인하고 있습니다.</p></div>
     <p class="field-hint"><a class="outline-button" href="#sns-candidates">SNS 계정 후보 체크 ↓</a> <a class="outline-button" href="#blogWorkspace">네이버 블로그 반자동 준비 ↓</a></p>
+    <section id="sns-temporary-search" class="panel temporary-search" aria-labelledby="temporary-search-heading">
+      <div class="section-heading"><div><span class="eyebrow">PUBLIC WEB SEARCH</span><h2 id="temporary-search-heading">공개 웹 검색 · 임시 목록</h2></div><button id="temporary-search-clear" type="button" class="outline-button" disabled>임시 결과 지우기</button></div>
+      <p class="search-notice">체크는 이 탭에서만 쓰는 <strong>임시 선택</strong>입니다. 새 검색·새로고침·페이지 이동·15분 경과 시 결과와 선택이 지워집니다. 저장 후보에 추가되지 않습니다.</p>
+      <p class="search-hint">선택한 SNS의 공개 웹 검색 결과를 찾습니다. 계정의 실제 소재지·실존 여부·팔로우 상태는 검증하지 않습니다. 지역은 검색어 조건이며 결과마다 직접 확인하세요.</p>
+      <form id="temporary-search-form" autocomplete="off"><fieldset id="temporary-search-fields" disabled><legend class="visually-hidden">임시 검색 조건</legend><div class="search-fields"><label>SNS<select id="temporary-search-platform"><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="x">X</option><option value="blog">네이버 블로그</option></select></label><label>검색 키워드<input id="temporary-search-keyword" maxlength="200" required placeholder="예: 여행사, 영상제작"></label><label>지역<input id="temporary-search-region" maxlength="100" list="temporary-search-regions" placeholder="전국·충청도·제주도 또는 직접 입력"></label><button id="temporary-search-submit" type="submit" class="outline-button">임시 검색</button></div></fieldset></form>
+      <datalist id="temporary-search-regions"></datalist>
+      <p class="search-hint">검색어와 지역은 Brave 검색 API에 전달됩니다. 검색·새 결과 묶음 조회에는 API 요금제에 따른 비용이 발생할 수 있습니다. 자동 검색·재시도는 하지 않습니다. <a href="https://api-dashboard.search.brave.com/terms-of-service" target="_blank" rel="noopener noreferrer">검색 API 이용조건</a></p>
+      <p id="temporary-search-feedback" role="status" aria-live="polite">검색 서비스 설정을 확인하고 있습니다.</p><a id="temporary-search-login" href="/admin/login?reason=session_expired" hidden>관리자 다시 로그인</a>
+      <p class="search-hint" id="temporary-search-range">임시 결과 없음</p>
+      <label class="temporary-search-check"><input id="temporary-search-all" type="checkbox" disabled>이 페이지 임시 전체 선택 <span id="temporary-search-selected">0개 선택</span></label>
+      <div id="temporary-search-results"><p class="search-empty">검색 전입니다. 결과는 영구 저장되지 않습니다.</p></div>
+      <nav id="temporary-search-pages" aria-label="임시 검색 페이지 이동"></nav><div class="search-actions"><button id="temporary-search-prev" type="button" class="outline-button" disabled>이전 임시 페이지</button><button id="temporary-search-next" type="button" class="outline-button" disabled>다음 임시 페이지</button></div>
+      <p class="search-hint">표시 결과는 공개 웹 검색에 등록된 일부 주소입니다. 프로필·게시물 구분은 URL 형식에 따른 안내이며, SNS 내부 전체 계정 검색이 아닙니다. 각 원문 링크에서 출처와 내용을 확인하세요.</p>
+    </section>
     <section id="sns-candidates" class="panel candidates" aria-labelledby="candidates-heading" tabindex="-1">
       <div class="section-heading"><div><span class="eyebrow">ACCOUNT CHECKLIST</span><h2 id="candidates-heading">SNS 계정 후보 체크</h2></div><button id="candidates-refresh" type="button" class="outline-button" disabled>후보 새로고침</button></div>
       <p class="candidate-hint">직접 조사한 계정을 추가하고 검토할 후보를 체크하세요. 체크·메모·상태 변경은 이 관리자에만 저장됩니다.</p>

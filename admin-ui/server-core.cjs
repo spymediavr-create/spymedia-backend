@@ -13,6 +13,9 @@ assets.set('/admin-assets/candidates-ui.js', 'candidates-ui.js');
 assets.set('/admin-assets/candidates.css', 'candidates.css');
 assets.set('/admin-assets/candidate-regions.js', 'candidate-regions.js');
 assets.set('/admin-assets/candidate-pagination.js', 'candidate-pagination.js');
+assets.set('/admin-assets/temporary-search.js', 'temporary-search.js');
+assets.set('/admin-assets/temporary-search.css', 'temporary-search.css');
+assets.set('/admin-assets/search-result-url.js', 'search-result-url.js');
 // Serve only the browser runtime's known files, never expose node_modules as a directory.
 const vendorAssets = new Map();
 for (const file of ['index.js','classes.js','const.js','errors.js','types.js','utils.js','worker.js']) {
@@ -128,6 +131,10 @@ function createAdminHandler(options = {}) {
           const body=await readJson(req);json(res,202,{jobs:await service.jobs.start(body.ids)});
         }else if(route==='/api/admin/jobs/retry'&&req.method==='POST'){
           const body=await readJson(req);json(res,202,{jobs:await service.jobs.retry(body.id)});
+        }else if(route==='/api/admin/temporary-search'&&req.method==='POST'){
+          if(url.search)throw Object.assign(new Error(),{status:400,code:'invalid_temporary_search'});
+          res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');
+          json(res,200,await service.temporarySearch.search(await readJson(req)));
         }else if(route==='/api/admin/candidates'&&req.method==='GET'){
           const keys=[...url.searchParams.keys()];
           if(keys.some(key=>!['platform','status','industry','region','q','offset','limit'].includes(key))||new Set(keys).size!==keys.length)throw Object.assign(new Error(),{status:400,code:'invalid_candidate_query'});
@@ -176,7 +183,7 @@ function createAdminHandler(options = {}) {
         if(route==='/api/admin/x/check')try{logXConnectionFailure(error);}catch{}
         const status=Number.isInteger(error.status)&&error.status>=400&&error.status<=599?error.status:500;
         if(authenticated&&route==='/api/admin/reels'&&req.method==='POST')try{logReelUploadFailure(error,status);}catch{}
-        const retry=diagnostic&&Number.isInteger(error.retryAfter)&&error.retryAfter>0&&error.retryAfter<=60?{'Retry-After':String(error.retryAfter)}:{};
+        const retry=(diagnostic||route==='/api/admin/temporary-search')&&Number.isInteger(error.retryAfter)&&error.retryAfter>0&&error.retryAfter<=60?{'Retry-After':String(error.retryAfter)}:{};
         json(res,status,{error:diagnostic?safeFailureCode(error.code):error.status&&error.code?error.code:'request_failed',...(details?{details}:{})},retry);
       }else res.end();
     }
