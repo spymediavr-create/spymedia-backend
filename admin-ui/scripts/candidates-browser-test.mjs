@@ -56,7 +56,7 @@ try{
     }
     await page.locator('#candidate-save').click();await idle();assert.match(await feedback(),/저장했습니다/);
   };
-  await page.goto(origin+'/admin/login');await page.locator('#login-id').fill('fixture');await page.locator('#login-password').fill(password);await page.locator('#login-submit').click();await page.waitForURL(origin+'/admin');await idle();
+  await page.goto(origin+'/admin/login');await page.locator('#login-id').fill('fixture');await page.locator('#login-password').fill(password);await page.locator('#login-submit').click();await page.waitForURL(origin+'/admin');await page.getByRole('tab',{name:'저장 후보',exact:true}).click();await idle();
   assert.equal(await page.locator('.candidate-card').count(),0);assert.match(await page.locator('#candidates-list').textContent(),/후보가 없습니다/);assert.equal(Object.keys(store.state.candidates||{}).length,0);assert.equal(await page.locator('#candidates-pages button').count(),0);assert.match(await page.locator('#candidates-range').textContent(),/0\/0페이지/);assert.equal(await page.locator('#candidates-prev').isDisabled(),true);assert.equal(await page.locator('#candidates-next').isDisabled(),true);
   assert.match(await page.locator('.candidate-notice').textContent(),/자동 확인하지 않습니다/);
   assert.deepEqual(await page.locator('#candidate-industries option').evaluateAll(items=>items.map(i=>i.value)),['공공기관·지자체','부동산','영상제작','건설','행사기획·운영','기타']);
@@ -70,7 +70,7 @@ try{
   assert.equal(await page.locator('.candidate-card').count(),3);assert.equal(await page.evaluate(()=>window.injected),undefined);assert.equal(await page.locator('.candidate-card script').count(),0);
   await page.getByRole('checkbox',{name:'합성 영흥도 기관 선택',exact:true}).check();await idle();assert.equal(await page.locator('#candidates-all').evaluate(el=>el.indeterminate),true);
   await page.locator('#candidates-all').check();await idle();assert.equal((await service.candidates.list()).selectedCount,3);
-  await page.reload();await idle();assert.equal(await page.locator('#candidates-all').isChecked(),true);
+  await page.reload();await page.getByRole('tab',{name:'저장 후보',exact:true}).click();await idle();assert.equal(await page.locator('#candidates-all').isChecked(),true);
   await page.locator('#candidates-exclude').click();await idle();assert.equal((await service.candidates.list({status:'excluded'})).total,3);
   accept=false;await page.locator('#candidates-done').click();assert.equal((await service.candidates.list({status:'done'})).total,0);
   accept=true;await page.locator('#candidates-done').click();await idle();assert.equal((await service.candidates.list({status:'done'})).total,3);
@@ -115,7 +115,7 @@ try{
   }
   const selectedCard=page.locator('.candidate-card').first(),selectedId=await selectedCard.getAttribute('data-candidate-id');await selectedCard.getByRole('checkbox').check();await idle();
   await page.getByRole('button',{name:'2페이지',exact:true}).click();await idle();await page.getByRole('button',{name:'1페이지',exact:true}).click();await idle();assert.equal(await page.locator('[data-candidate-id="'+selectedId+'"] input[type=checkbox]').isChecked(),true);
-  await page.reload();await idle();assert.equal(await page.locator('[data-candidate-id="'+selectedId+'"] input[type=checkbox]').isChecked(),true);
+  await page.reload();await page.getByRole('tab',{name:'저장 후보',exact:true}).click();await idle();assert.equal(await page.locator('[data-candidate-id="'+selectedId+'"] input[type=checkbox]').isChecked(),true);
   for(let i=18;i<77;i++)await seedPage(i);
   await page.locator('#candidates-refresh').click();await idle();await page.getByRole('button',{name:'4페이지',exact:true}).click();await idle();assert.ok((await page.locator('#candidates-pages').textContent()).includes('…'));assert.ok(await page.locator('#candidates-pages button').count()<=7);
   for(const width of [390,360]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('.candidate-pages').screenshot({path:path.join(output,'page-numbers-'+width+'.png')});}
@@ -138,7 +138,7 @@ try{
   await row('지역 호환 합성 0').getByRole('button',{name:'정보·메모 수정'}).click();assert.equal(await page.locator('#candidate-region').inputValue(),'전라북도 전주시');await page.locator('#candidate-cancel').click();
   await filter({region:'제주특별자치도'});assert.equal(await page.locator('.candidate-card').count(),1);
   await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#sns-candidates').screenshot({path:path.join(output,'regions-mobile-390.png')});
-  await page.reload();await idle();await filter({region:'전라도'});assert.equal(await page.locator('.candidate-card').count(),1);await filter({region:'영흥도'});
+  await page.reload();await page.getByRole('tab',{name:'저장 후보',exact:true}).click();await idle();await filter({region:'전라도'});assert.equal(await page.locator('.candidate-card').count(),1);await filter({region:'영흥도'});
   pass('Nationwide sends no region restriction; regional groups, official/old names, unknown regions and external search terms work without rewriting saved text');
   await row('합성 영흥도').getByRole('button',{name:'정보·메모 수정'}).click();await page.locator('#candidate-note').fill('만료 시 보존할 메모');failMutation=401;await page.locator('#candidate-save').click();await page.waitForFunction(()=>!document.getElementById('candidates-login').hidden);
   assert.equal(await page.locator('#candidate-note').inputValue(),'만료 시 보존할 메모');assert.equal(await page.locator('#candidate-save').isDisabled(),true);assert.equal(await page.locator('#prepare-server').isDisabled(),true);failMutation=null;

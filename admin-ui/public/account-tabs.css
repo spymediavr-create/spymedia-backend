@@ -1,0 +1,11 @@
+.account-workspace{margin-bottom:24px;padding:24px;scroll-margin-top:16px;min-width:0}
+.account-workspace h2{font-size:20px;margin:7px 0}
+.account-intro{font-size:13px;line-height:1.8;color:#526b7c;margin:10px 0 16px}
+.account-tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:0 0 16px;padding:0 0 6px}
+.account-tabs [role=tab]{flex:1;min-width:0;min-height:44px;border:1px solid transparent;border-radius:6px;background:transparent;padding:10px 14px;font:inherit;font-size:13px;color:#526b7c;cursor:pointer}
+.account-tabs [aria-selected=true]{border-color:#65bfd3;background:#eaf8fc;color:#006b83;font-weight:700}
+.account-workspace>.account-pane{padding:0;margin:0;min-width:0;scroll-margin-top:16px}
+.account-pane-toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.account-pane-toolbar>span{font-size:12px;color:#526b7c}
+.account-workspace :focus-visible{outline:3px solid #61baca;outline-offset:3px}
+@media(max-width:760px){.account-workspace{padding:18px 14px}.account-tabs [role=tab]{padding:10px 8px}.account-intro{font-size:12px}.account-pane-toolbar{align-items:start}}

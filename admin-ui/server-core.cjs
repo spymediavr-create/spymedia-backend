@@ -16,6 +16,8 @@ assets.set('/admin-assets/candidate-pagination.js', 'candidate-pagination.js');
 assets.set('/admin-assets/temporary-search.js', 'temporary-search.js');
 assets.set('/admin-assets/temporary-search.css', 'temporary-search.css');
 assets.set('/admin-assets/search-result-url.js', 'search-result-url.js');
+assets.set('/admin-assets/account-tabs.js', 'account-tabs.js');
+assets.set('/admin-assets/account-tabs.css', 'account-tabs.css');
 // Serve only the browser runtime's known files, never expose node_modules as a directory.
 const vendorAssets = new Map();
 for (const file of ['index.js','classes.js','const.js','errors.js','types.js','utils.js','worker.js']) {

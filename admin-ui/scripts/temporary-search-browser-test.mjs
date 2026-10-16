@@ -50,6 +50,25 @@ try{
   await page.goto(origin+'/admin/login');await page.locator('#login-id').fill('fixture');await page.locator('#login-password').fill(password);await page.locator('#login-submit').click();await page.waitForURL(origin+'/admin');await page.waitForFunction(()=>document.getElementById('temporary-search-feedback').textContent.includes('설정'));
   assert.match(await page.locator('#temporary-search-feedback').textContent(),/설정되지/);assert.equal(await page.locator('#temporary-search-submit').isDisabled(),true);assert.equal(await page.locator('.search-result').count(),0);assert.equal(providerCalls,0);
   pass('Unconfigured API is explicit, makes zero provider requests and shows no fake results while the saved manual candidate remains');
+  const searchTab=page.getByRole('tab',{name:'새 계정 검색',exact:true}),savedTab=page.getByRole('tab',{name:'저장 후보',exact:true});
+  const active=async saved=>{
+    assert.equal(await page.locator('#sns-candidates').isVisible(),saved);assert.equal(await page.locator('#sns-temporary-search').isVisible(),!saved);
+    for(const [tab,selected,panel]of [[searchTab,!saved,'sns-temporary-search'],[savedTab,saved,'sns-candidates']]){
+      assert.equal(await tab.getAttribute('aria-selected'),String(selected));assert.equal(await tab.getAttribute('tabindex'),selected?'0':'-1');assert.equal(await tab.getAttribute('aria-controls'),panel);
+      assert.equal(await page.locator('#'+panel).getAttribute('aria-labelledby'),await tab.getAttribute('id'));
+    }
+    assert.equal(await page.locator('#sns-accounts').getByRole('tabpanel').count(),1);
+  };
+  assert.equal(await page.locator('#sns-accounts.panel').count(),1);assert.equal(await page.locator('#sns-accounts .panel').count(),0);assert.equal(await page.locator('#sns-accounts h2').count(),1);await active(false);
+  await searchTab.focus();await page.keyboard.press('End');await active(true);assert.equal(await savedTab.evaluate(el=>el===document.activeElement),true);
+  await page.keyboard.press('Tab');assert.equal(await page.locator('#sns-candidates').evaluate(el=>el===document.activeElement),true);
+  await page.keyboard.press('Tab');assert.equal(await page.locator('#candidates-refresh').evaluate(el=>el===document.activeElement),true);
+  await savedTab.focus();await page.keyboard.press('Home');await active(false);assert.equal(await searchTab.evaluate(el=>el===document.activeElement),true);
+  await page.keyboard.press('ArrowLeft');await active(true);await page.keyboard.press('ArrowRight');await active(false);
+  await page.evaluate(()=>location.hash='sns-candidates');await page.waitForFunction(()=>!document.getElementById('sns-candidates').hidden);await active(true);
+  await page.evaluate(()=>location.hash='sns-temporary-search');await page.waitForFunction(()=>!document.getElementById('sns-temporary-search').hidden);await active(false);await page.evaluate(()=>history.replaceState(null,'','/admin'));
+  assert.equal(providerCalls,0);assert.ok(requests.filter(r=>r.method!=='GET').every(r=>r.path==='/api/admin/login'));
+  pass('One outer card and one heading contain two correctly labelled tabs; keyboard wrap/Home/End, focus order and legacy fragment links work without a search or candidate write');
   settings.env.BRAVE_SEARCH_ENABLED='true';settings.env.BRAVE_SEARCH_API_KEY=key;await page.reload();
   const idle=()=>page.waitForFunction(()=>!document.getElementById('temporary-search-fields').disabled);
   await idle();assert.equal(providerCalls,0);assert.equal(await page.locator('#candidate-accountName').inputValue(),'');
@@ -57,6 +76,13 @@ try{
   await search();assert.equal(providerCalls,1);assert.equal(await page.locator('.search-result').count(),10);assert.equal(providerRequests[0].count,20);assert.equal(providerRequests[0].offset,0);assert.equal(providerRequests[0].query,'합성 여행사 site:instagram.com');
   assert.equal(await page.locator('#temporary-search-results script').count(),0);assert.equal(await page.locator('#temporary-search-results img').count(),0);assert.equal(await page.evaluate(()=>window.searchInjected),undefined);
   await page.locator('#temporary-search-all').check();assert.match(await page.locator('#temporary-search-selected').textContent(),/10개/);
+  await page.waitForFunction(()=>!document.getElementById('candidates-refresh').disabled);const beforeSwitch=providerCalls,candidateReadsBefore=requests.filter(r=>r.path.startsWith('/api/admin/candidates')).length;await savedTab.click();await active(true);
+  assert.equal(await page.locator('.candidate-card').count(),1);assert.equal(await page.locator('.candidate-card input[type=checkbox]').isChecked(),true);assert.equal(await page.locator('.candidate-card').getAttribute('data-status'),'done');
+  await page.locator('.candidate-card').getByRole('button',{name:'정보·메모 수정'}).click();await page.locator('#candidate-note').fill('합성 저장 후보 편집 초안');await page.locator('#candidates-query').fill('기존 수동');
+  await searchTab.click();await active(false);assert.equal(await page.locator('#temporary-search-all').isChecked(),true);assert.match(await page.locator('#temporary-search-selected').textContent(),/10개/);assert.equal(await page.locator('#temporary-search-keyword').inputValue(),'합성 여행사');
+  await savedTab.click();assert.equal(await page.locator('#candidate-note').inputValue(),'합성 저장 후보 편집 초안');assert.equal(await page.locator('#candidate-editor').evaluate(el=>el.open),true);assert.equal(await page.locator('#candidates-query').inputValue(),'기존 수동');
+  await searchTab.click();assert.equal(providerCalls,beforeSwitch);assert.equal(requests.filter(r=>r.path.startsWith('/api/admin/candidates')).length,candidateReadsBefore);assert.equal(await fs.readFile(path.join(dir,'journal.json'),'utf8'),journalBefore);
+  pass('Tab switches preserve temporary checks/query and the separate saved candidate checks/status/filter/editor draft; they never search, save, copy or mix the two collections');
   await page.locator('#temporary-search-next').click();assert.equal(await page.locator('.search-result').count(),10);assert.equal(providerCalls,1);assert.equal(await page.locator('#temporary-search-results [data-kind=post]').count(),1);assert.match(await page.locator('#temporary-search-results').textContent(),/지역 미검증/);
   await page.getByRole('button',{name:'임시 1페이지',exact:true}).click();assert.equal(await page.locator('#temporary-search-all').isChecked(),true);assert.equal(providerCalls,1);
   pass('One synthetic 20-result request yields two ten-row pages, preserving temporary checks with profile/post and unverified-region labels and literal text');
@@ -65,21 +91,31 @@ try{
   pass('Source link opens with no opener/referrer/cookie; cross-batch duplicate profile and post URLs are removed and a short last page disables further calls');
   for(const sns of ['facebook','x','blog']){const before=providerCalls;await search(sns,'합성 건설','충청도');assert.equal(providerCalls,before+1);assert.equal(await page.locator('.search-result').count(),10);assert.ok(providerRequests.at(-1).query.includes('충북 OR 충남 OR 대전 OR 세종'));await page.locator('#temporary-search-next').click();assert.equal(providerCalls,before+1);assert.equal(await page.locator('#temporary-search-results [data-kind=post]').count(),1);}
   pass('Facebook, X/Twitter and Naver Blog use only their selected domain queries; viewing the second ten-row page makes no extra API request');
-  for(const width of [390,360]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#sns-temporary-search').screenshot({path:path.join(output,'mock-mobile-'+width+'.png')});}
+  await page.locator('#sns-accounts').screenshot({path:path.join(output,'unified-search-desktop.png')});await savedTab.click();await page.locator('#sns-accounts').screenshot({path:path.join(output,'unified-saved-desktop.png')});await searchTab.click();
+  for(const width of [390,360]){
+    await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+    for(const tab of [searchTab,savedTab]){const box=await tab.boundingBox();assert.ok(box.height>=44&&box.width>=44);}
+    await page.locator('#sns-accounts').screenshot({path:path.join(output,'mock-mobile-'+width+'.png')});
+    await savedTab.click();await active(true);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#sns-accounts').screenshot({path:path.join(output,'unified-saved-mobile-'+width+'.png')});
+    await searchTab.click();await active(false);
+  }
   assert.equal(await page.locator('#sns-temporary-search button').filter({hasText:'저장'}).count(),0);assert.equal(await page.locator('#sns-temporary-search button').filter({hasText:'추가'}).count(),0);
   await page.locator('#temporary-search-clear').click();assert.equal(await page.locator('.search-result').count(),0);assert.match(await page.locator('#temporary-search-selected').textContent(),/0개/);
-  await search();await page.evaluate(()=>window.__expireTemporary());assert.equal(await page.locator('.search-result').count(),0);assert.match(await page.locator('#temporary-search-feedback').textContent(),/열람 시간/);
+  await search();await savedTab.click();await page.evaluate(()=>window.__expireTemporary());assert.equal(await page.locator('.search-result').count(),0);assert.equal(await page.locator('#candidate-note').inputValue(),'합성 저장 후보 편집 초안');await searchTab.click();assert.match(await page.locator('#temporary-search-feedback').textContent(),/열람 시간/);
   await search();await page.locator('#temporary-search-all').check();await page.reload();await idle();assert.equal(await page.locator('.search-result').count(),0);assert.match(await page.locator('#temporary-search-selected').textContent(),/0개/);
   await search();await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));assert.equal(await page.locator('.search-result').count(),0);assert.equal(await page.locator('#temporary-search-keyword').inputValue(),'');assert.equal(await page.evaluate(()=>window.__persistentWrites),0);
-  pass('360/390px fit; no permanent add/save controls exist; clear, lifetime expiry, reload and pagehide remove temporary results/checks without persistent storage writes');
+  pass('Both views fit 360/390px with 44px tabs; no permanent search add/save exists; expiry also clears a hidden search view while saved drafts survive; reload and pagehide remove temporary data');
   mode='empty';await search();assert.equal(await page.locator('.search-result').count(),0);assert.equal(await page.locator('#temporary-search-next').isDisabled(),true);assert.match(await page.locator('#temporary-search-feedback').textContent(),/0개/);
   mode='filtered-pages';const beforeLimit=providerCalls;await search();for(let i=0;i<9;i++){await page.locator('#temporary-search-next').click();await idle();}assert.equal(providerCalls,beforeLimit+10);assert.equal(providerRequests.at(-1).offset,9);assert.equal(await page.locator('#temporary-search-next').isDisabled(),true);assert.match(await page.locator('#temporary-search-feedback').textContent(),/마지막 결과 묶음/);
   pass('True zero results, unsafe-only results and the provider offset-9 boundary stay honest and never automatically fetch another page');
   mode='error';await search();assert.match(await page.locator('#temporary-search-feedback').textContent(),/완료하지 못/);assert.ok(!(await page.locator('#sns-temporary-search').textContent()).includes(rawPrivate));assert.ok(!(await page.locator('body').textContent()).includes(key));
   failResponse={status:429,error:'temporary_search_rate_limited'};await page.locator('#temporary-search-submit').click();await page.waitForFunction(()=>document.getElementById('temporary-search-feedback').textContent.includes('너무 빠르거나'));assert.match(await page.locator('#temporary-search-feedback').textContent(),/요청/);assert.equal(await page.locator('#temporary-search-submit').isDisabled(),true);failResponse=null;await idle();mode='normal';
+  gate=new Promise(resolve=>release=resolve);const beforePending=providerCalls,pending=page.waitForResponse(r=>r.url()===origin+'/api/admin/temporary-search');await page.locator('#temporary-search-keyword').fill('합성 탭 전환');await page.locator('#temporary-search-submit').click();await savedTab.click();await active(true);release();gate=null;await pending;await idle();assert.equal(providerCalls,beforePending+1);assert.equal(await page.locator('.search-result').count(),10);await searchTab.click();await active(false);assert.equal(await page.locator('.search-result').first().isVisible(),true);
+  pass('Switching tabs during an in-flight synthetic search neither aborts nor starts a request; its results remain available in the search view');
   gate=new Promise(resolve=>release=resolve);await page.locator('#temporary-search-keyword').fill('합성 지연');await page.locator('#temporary-search-submit').click();await page.waitForFunction(()=>document.getElementById('temporary-search-clear').disabled===false);await page.locator('#temporary-search-clear').click();release();gate=null;await page.waitForTimeout(100);assert.equal(await page.locator('.search-result').count(),0);
   pass('Provider error is sanitized, 429 is enforced without retry, and clearing an in-flight search prevents stale results from reappearing');
   failResponse={status:401,error:'authentication_required'};await page.locator('#temporary-search-keyword').fill('합성 만료');await page.locator('#temporary-search-submit').click();await page.waitForFunction(()=>document.getElementById('temporary-search-login').hidden===false);assert.equal(await page.locator('.search-result').count(),0);assert.equal(await page.locator('#temporary-search-submit').isDisabled(),true);
+  await savedTab.click();await active(true);assert.equal(await page.locator('#candidate-save').isDisabled(),true);assert.equal(await page.locator('#candidates-login').isVisible(),true);await searchTab.click();await active(false);
   assert.equal(await fs.readFile(path.join(dir,'journal.json'),'utf8'),journalBefore);assert.deepEqual((await service.candidates.list()).items[0],manual);assert.equal(snsCalls,0);assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   assert.ok(requests.filter(r=>r.method!=='GET').every(r=>['/api/admin/login','/api/admin/temporary-search'].includes(r.path)));assert.ok(requests.every(r=>!r.path.includes('합성')&&!r.path.includes(encodeURIComponent('합성'))));
   pass('Auth expiry clears search memory; existing saved candidate/journal bytes are unchanged; zero SNS actions, persistence calls and real external requests occur');

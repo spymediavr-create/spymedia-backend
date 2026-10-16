@@ -75,7 +75,7 @@ try{
   page.once('dialog',d=>d.accept());await page.click('#apply-import');assert.match(await page.inputValue('#title'),/강변/);assert.equal(await page.locator('#imported-photo img').count(),1);
   await page.fill('#region','서울');await page.selectOption('#shoot-type','드론촬영');await page.click('#recommend-tags');await page.locator('#suggestion-list button').first().click();
   await page.fill('#tag-input','#강변 #드론촬영');await page.click('#add-tags');await page.fill('#x-text','강변 풍경을 하늘에서 담았습니다. #SpyMedia');
-  assert.equal(await page.getByRole('tab').count(),5);
+  assert.equal(await page.locator('#preview-tabs').getByRole('tab').count(),5);
   const labels=await page.locator('.channel-info strong').allTextContents();assert.deepEqual(labels,['유튜브','인스타그램','X','페이스북','블로그']);
   const instagramCard=page.locator('[data-channel=instagram]');assert.equal(await instagramCard.isEnabled(),true);assert.equal(await instagramCard.getAttribute('aria-controls'),'instagram-direct');assert.equal(await instagramCard.getAttribute('aria-pressed'),null);await instagramCard.click();assert.equal(await page.evaluate(()=>document.activeElement?.id),'instagram-direct');assert.match(await page.locator('[data-channel=x]').textContent(),/설정 필요.*전송 불가/);
   await page.locator('#preview-media img').waitFor();await page.screenshot({path:path.join(output,'admin-desktop.png'),fullPage:true});
