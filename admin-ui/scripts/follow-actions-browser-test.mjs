@@ -30,9 +30,26 @@ try{
   browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||'/usr/bin/chromium'});
   const context=await browser.newContext({viewport:{width:1440,height:1100}});
   await context.addInitScript(()=>{
-    window.__bridge=[];window.__storageWrites=0;Storage.prototype.setItem=function(){window.__storageWrites++;throw Error('No persistent search storage');};
-    const timeout=window.setTimeout;window.setTimeout=(fn,ms,...rest)=>{if(ms===900000)window.__expireSearch=fn;return timeout(fn,ms,...rest);};
-    window.addEventListener('message',event=>{const m=event.data;if(m?.source!=='spymedia-admin-follow')return;window.__bridge.push(m);if(m.type==='PREPARE')window.postMessage({source:'spymedia-follow-extension',type:'ACCEPTED',requestId:m.requestId},location.origin);});
+    window.__bridge=[];window.__bridgeMode='normal';window.__storageWrites=0;Storage.prototype.setItem=function(){window.__storageWrites++;throw Error('No persistent search storage');};
+    const timeout=window.setTimeout;window.setTimeout=(fn,ms,...rest)=>{if(ms===900000)window.__expireSearch=fn;if(ms===45000)window.__expireStep=fn;if(ms>=600000&&ms<=900000)window.__lastLongTimer=fn;return timeout(fn,ms,...rest);};
+    const jobs=new Map();
+    window.addEventListener('message',event=>{
+      const m=event.data;if(m?.source!=='spymedia-admin-follow')return;window.__bridge.push(m);
+      const reply=(type,detail={})=>window.postMessage({source:'spymedia-follow-extension',type,action:m.type,requestId:m.requestId,version:'0.2.0',...detail},location.origin);
+      if(m.type==='PING'){if(window.__bridgeMode==='old-legacy'){window.postMessage({source:'spymedia-follow-extension',type:'READY',requestId:m.requestId},location.origin);return;}reply('READY',{version:window.__bridgeMode==='old'?'0.1.0':'0.2.0'});return;}
+      if(m.type==='CANCEL'){jobs.delete(m.requestId);return;}
+      if(m.type==='PREPARE'){assertMock(m.control==='admin');const job={expectedAccount:m.expectedAccount,profiles:[...m.profiles],expiresAt:m.expiresAt,index:0,started:false,running:false,terminalError:null,results:[]};jobs.set(m.requestId,job);reply('STATE',{job});return;}
+      const job=jobs.get(m.requestId);if(!job)return;
+      if(m.type==='START'){job.started=true;job.running=true;const output=structuredClone(job);if(window.__bridgeMode==='wrong-account')output.expectedAccount='other_actor';if(window.__bridgeMode==='wrong-profile')output.profiles=['https://www.instagram.com/wrong_fixture/'];if(window.__bridgeMode==='wrong-expiry')output.expiresAt++;reply('STATE',{job:output});return;}
+      if(m.type==='STEP'){
+        assertMock(m.index===job.index);const done=()=>{job.results.push({index:job.index,state:['followed','request_sent','following','requested'][job.index%4]});job.index++;job.running=job.index<job.profiles.length;reply('STATE',{job:structuredClone(job)});};
+        if(window.__bridgeMode==='hold'){window.__releaseStep=done;return;}
+        if(window.__bridgeMode==='error'){reply('ERROR',{code:'account_unverified'});return;}
+        done();return;
+      }
+      if(m.type==='STATUS')reply('STATE',{job});
+    });
+    function assertMock(condition){if(!condition)throw Error('Mock extension protocol mismatch');}
   });
   await context.route('**/*',route=>{if(new URL(route.request().url()).origin===origin)return route.continue();external.push(route.request().url());return route.abort();});
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
@@ -42,15 +59,18 @@ try{
   await idle();assert.equal(prepareCalls+executeCalls+searchCalls,0);
   assert.equal(await page.locator('#temporary-search-follow-prepare').isDisabled(),true);
   await search('instagram');await page.locator('#temporary-search-all').check();assert.equal(await page.locator('#temporary-search-follow-prepare').isDisabled(),false);
-  await page.locator('#temporary-search-follow-prepare').click();await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('검토 창'));
+  await page.locator('#temporary-search-follow-prepare').click();await page.locator('#temporary-search-instagram-follow-start').waitFor();assert.equal(await page.evaluate(()=>window.__bridge.length),0);assert.equal(await page.locator('#temporary-search-follow-review li').count(),10);
+  await page.locator('#temporary-search-instagram-follow-start').click();await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('처리가 끝났습니다'));
   const bridge=await page.evaluate(()=>window.__bridge);const sent=bridge.find(m=>m.type==='PREPARE');assert.equal(sent.profiles.length,10);assert.equal(sent.expectedAccount,'spymedia_kr');assert.equal(sent.platform,'instagram');assert.ok(sent.expiresAt>Date.now());assert.ok(!JSON.stringify(sent).includes('합성 검색'));assert.equal(await page.locator('#temporary-search-follow-prepare').isDisabled(),true);
+  assert.equal(sent.control,'admin');assert.deepEqual(bridge.filter(m=>m.type==='STEP').map(m=>m.index),Array.from({length:10},(_,i)=>i));assert.match(await page.locator('#temporary-search-follow-review').textContent(),/팔로우 완료/);assert.match(await page.locator('#temporary-search-follow-review').textContent(),/상대 승인 대기/);assert.match(await page.locator('#temporary-search-follow-review').textContent(),/이미 팔로잉/);assert.match(await page.locator('#temporary-search-follow-review').textContent(),/이미 요청 중/);
   await page.locator('#temporary-search-clear').click();await page.waitForFunction(id=>window.__bridge.some(m=>m.type==='CANCEL'&&m.requestId===id),sent.requestId);
-  console.log('PASS selected profiles passed to extension only on click; preparation is not follow success; clear cancels');
+  console.log('PASS inline exact-account/target review before any extension action; sequential once-only STEP and per-target result states; clear cancels');
   await search('instagram');await page.locator('#temporary-search-next').click();await page.locator('#temporary-search-all').check();assert.equal(await page.locator('#temporary-search-follow-prepare').isDisabled(),true);assert.match(await page.locator('#temporary-search-follow').textContent(),/게시물 주소/);
   await page.locator('#account-tab-saved').click();await page.waitForFunction(()=>!document.getElementById('candidates-refresh').disabled);await page.locator('#candidates-all').check();await page.waitForFunction(()=>!document.getElementById('candidates-refresh').disabled);
-  await page.locator('#candidates-follow-prepare').click();await page.waitForFunction(()=>document.getElementById('candidates-follow-feedback').textContent.includes('검토 창'));assert.ok(await page.evaluate(()=>window.__bridge.some(m=>m.profiles?.[0]==='https://www.instagram.com/saved_fixture/')));
-  await page.locator('#candidates-follow').getByRole('button',{name:'전달한 Instagram 작업 취소'}).click();
-  console.log('PASS post URLs cannot be followed; saved current-page selections use same separate review path');
+  await page.locator('#candidates-follow-prepare').click();await page.locator('#candidates-instagram-follow-start').click();await page.waitForFunction(()=>document.getElementById('candidates-follow-feedback').textContent.includes('처리가 끝났습니다'));assert.ok(await page.evaluate(()=>window.__bridge.some(m=>m.profiles?.[0]==='https://www.instagram.com/saved_fixture/')));
+  await page.locator('#candidates-follow').getByRole('button',{name:'Instagram 작업 중지'}).click();
+  assert.equal(await page.locator('#candidates-follow-review li').count(),1);await page.evaluate(()=>window.__lastLongTimer());assert.equal(await page.locator('#candidates-follow-review li').count(),0);assert.match(await page.locator('#candidates-follow-feedback').textContent(),/유효 시간이 끝났습니다/);
+  console.log('PASS post URLs cannot be followed; saved current-page selections use same inline review path');
   await page.locator('#account-tab-search').click();await search('x');await page.locator('#temporary-search-all').check();assert.equal(await page.locator('#temporary-search-follow-prepare').isDisabled(),true);await page.locator('#temporary-search-all').uncheck();await page.locator('[data-search-select]').first().check();
   await page.locator('#temporary-search-follow-prepare').click();await page.getByRole('button',{name:'이 X 계정 팔로우 실행'}).waitFor();assert.equal(prepareCalls,1);assert.equal(executeCalls,0);
   page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'이 X 계정 팔로우 실행'}).click();assert.equal(executeCalls,0);
@@ -59,9 +79,18 @@ try{
   failX=true;await page.locator('#temporary-search-follow-prepare').click();await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('기존 인증'));assert.equal(await page.locator('.search-result').count(),10);assert.equal(await page.locator('#temporary-search-fields').isDisabled(),false);failX=false;
   console.log('PASS X only one reviewed account; cancel sends no mutation; confirmed mock POST pending is not marked completed');
   await search('blog');assert.equal(await page.locator('#temporary-search-follow-prepare').isVisible(),false);assert.match(await page.locator('#temporary-search-follow').textContent(),/서로이웃은 상대/);
-  await search('instagram');await page.locator('[data-search-select]').first().check();await page.locator('#temporary-search-follow-prepare').click();await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('검토 창'));
+  const beginInstagram=async mode=>{await page.evaluate(mode=>{window.__bridgeMode=mode;window.__releaseStep=null;},mode);await search('instagram');await page.locator('[data-search-select]').first().check();await page.locator('#temporary-search-follow-prepare').click();await page.locator('#temporary-search-instagram-follow-start').click();};
+  let marker,recent;for(const mode of ['old','old-legacy']){marker=await page.evaluate(()=>window.__bridge.length);await beginInstagram(mode);await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('0.2.0 이상'));recent=await page.evaluate(i=>window.__bridge.slice(i),marker);assert.equal(recent.filter(m=>m.type==='PREPARE'||m.type==='START'||m.type==='STEP').length,0);assert.equal(await page.locator('#temporary-search-follow details').getAttribute('open'),'');}
+  for(const mode of ['wrong-account','wrong-profile','wrong-expiry']){marker=await page.evaluate(()=>window.__bridge.length);await beginInstagram(mode);await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('응답을 검증하지 못'));recent=await page.evaluate(i=>window.__bridge.slice(i),marker);assert.equal(recent.filter(m=>m.type==='STEP').length,0);assert.ok(recent.some(m=>m.type==='CANCEL'));}
+  await beginInstagram('error');await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('로그아웃을 뜻하지 않습니다'));assert.equal(await page.locator('#temporary-search-follow-review .follow-result').first().textContent(),'중지 · 결과 확인 필요');
+  console.log('PASS old extension never prepares; wrong account/profile/expiry responses stop before STEP; identity failure distinct from logout');
+  await beginInstagram('hold');await page.waitForFunction(()=>!!window.__releaseStep);const held=await page.evaluate(()=>window.__bridge.findLast(m=>m.type==='STEP'));await page.locator('#temporary-search-follow').getByRole('button',{name:'Instagram 작업 중지'}).click();await page.waitForFunction(id=>window.__bridge.some(m=>m.type==='CANCEL'&&m.requestId===id),held.requestId);assert.match(await page.locator('#temporary-search-follow-review').textContent(),/결과 확인 필요/);await page.evaluate(()=>window.__releaseStep());assert.doesNotMatch(await page.locator('#temporary-search-follow-feedback').textContent(),/처리가 끝났습니다/);assert.equal(await page.evaluate(id=>window.__bridge.filter(m=>m.requestId===id&&m.type==='STEP').length,held.requestId),1);
+  await beginInstagram('hold');await page.waitForFunction(()=>!!window.__releaseStep);const changed=await page.evaluate(()=>window.__bridge.findLast(m=>m.type==='STEP'));await page.locator('[data-search-select]').first().uncheck();await page.waitForFunction(id=>window.__bridge.some(m=>m.type==='CANCEL'&&m.requestId===id),changed.requestId);assert.equal(await page.locator('#temporary-search-follow-review li').count(),0);await page.evaluate(()=>window.__releaseStep());assert.equal(await page.locator('#temporary-search-follow-review li').count(),0);
+  await beginInstagram('hold');await page.waitForFunction(()=>!!window.__releaseStep);const timed=await page.evaluate(()=>window.__bridge.findLast(m=>m.type==='STEP'));await page.evaluate(()=>window.__expireStep());await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('응답 시간이 초과'));await page.evaluate(()=>window.__releaseStep());assert.equal(await page.evaluate(id=>window.__bridge.filter(m=>m.requestId===id&&m.type==='STEP').length,timed.requestId),1);
+  console.log('PASS stop/selection change ignore late replies; 45-second STEP timeout cancels without retransmission');
+  await beginInstagram('hold');await page.waitForFunction(()=>!!window.__releaseStep);
   await page.evaluate(()=>window.__expireSearch());assert.equal(await page.locator('.search-result').count(),0);assert.equal(await page.locator('#temporary-search-follow-prepare').isDisabled(),true);
-  await search('instagram');await page.locator('[data-search-select]').first().check();await page.locator('#temporary-search-follow-prepare').click();await page.waitForFunction(()=>document.getElementById('temporary-search-follow-feedback').textContent.includes('검토 창'));
+  await page.evaluate(()=>{window.__bridgeMode='normal';});await search('instagram');await page.locator('[data-search-select]').first().check();await page.locator('#temporary-search-follow-prepare').click();await page.locator('#temporary-search-instagram-follow-start').waitFor();
   await page.locator('#sns-accounts').screenshot({path:path.join(output,'follow-desktop.png')});
   await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.locator('#sns-accounts').screenshot({path:path.join(output,'follow-mobile.png')});
   await page.evaluate(()=>window.dispatchEvent(new Event('sns-auth-expired')));assert.equal(await page.locator('#temporary-search-follow-prepare').isDisabled(),true);assert.equal(await page.locator('.search-result').count(),0);

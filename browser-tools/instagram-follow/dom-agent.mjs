@@ -1,9 +1,13 @@
 // Serialized by chrome.scripting.executeScript. No private API, remote scripts or hidden state.
-// Deliberately narrow DOM contract: unsupported or changed Instagram markup stops the job.
+// Verify visible navigation and the selected profile; unsupported/ambiguous layouts stop the job.
 export function inspectInstagramPage({expectedAccount, targetUrl, mode = 'inspect'}) {
   const fail = code => ({ok:false, code});
   const text = node => String(node?.innerText ?? node?.textContent ?? '').replace(/\s+/g,' ').trim();
-  const visible = node => !!node && !node.hidden && node.getAttribute('aria-hidden') !== 'true' && node.getClientRects().length > 0;
+  const visible = node => {
+    if (!node || node.hidden || node.getAttribute('aria-hidden') === 'true' || !node.getClientRects().length) return false;
+    if (typeof getComputedStyle === 'function') { const style = getComputedStyle(node); if (style.visibility === 'hidden' || style.display === 'none') return false; }
+    return true;
+  };
   const current = new URL(location.href);
   if (current.origin !== 'https://www.instagram.com') return fail('wrong_profile');
   if (/^\/accounts\/(login|signup)/.test(current.pathname)) return fail('login_required');
@@ -13,17 +17,64 @@ export function inspectInstagramPage({expectedAccount, targetUrl, mode = 'inspec
   if (document.querySelector('input[name="username"], input[name="password"]')) return fail('login_required');
   if (current.href !== targetUrl) return fail('wrong_profile');
   const target = current.pathname.split('/')[1];
-  // A sidebar/navigation Profile link identifies the acting account independently of target header.
+  const profileName = anchor => {
+    try { const u = new URL(anchor.getAttribute('href'),location.origin), m = u.pathname.match(/^\/([A-Za-z0-9._]{1,30})\/?$/); return u.origin === current.origin && !u.search && !u.hash && m ? m[1].toLowerCase() : null; } catch { return null; }
+  };
+  const profileLabel = (anchor,name) => {
+    const labels = [text(anchor),anchor.getAttribute('aria-label'),anchor.getAttribute('title'),
+      ...Array.from(anchor.querySelectorAll('img')).map(n=>n.getAttribute('alt')),
+      ...Array.from(anchor.querySelectorAll('svg[aria-label],svg title')).map(n=>n.getAttribute('aria-label') || text(n))].filter(Boolean).map(s=>String(s).replace(/\s+/g,' ').trim());
+    return labels.some(label=>{
+      if (/^(profile|프로필)$/i.test(label)) return true;
+      const m = label.match(/^@?([A-Za-z0-9._]{1,30})(?:['’]s profile picture|님의\s*프로필\s*사진)$/i);
+      return m && m[1].toLowerCase() === name;
+    });
+  };
+  const inContent = anchor => !!anchor.closest?.('main,[role="main"],article,[role="dialog"]');
+  const navigationContext = anchor => {
+    // New desktop layouts use divs for the icon rail. Require independent Home and
+    // another navigation destination, outside profile content, rather than a matching href alone.
+    for (let parent=anchor.parentElement,depth=0;parent && parent!==document.body && depth<12;parent=parent.parentElement,depth++) {
+      if (parent.matches('main,[role="main"],article,[role="dialog"]') || parent.querySelector('main,[role="main"],article')) return false;
+      const paths = new Set();
+      for (const a of parent.querySelectorAll('a[href]')) {
+        if (!visible(a)) continue;
+        try { const u = new URL(a.getAttribute('href'),location.origin); if (u.origin===current.origin) paths.add(u.pathname.replace(/\/$/,'') || '/'); } catch {}
+      }
+      if (paths.has('/') && ['/direct/inbox','/explore','/reels','/reels_tab'].some(path=>paths.has(path))) return true;
+    }
+    return false;
+  };
+  // The acting account must come from navigation, independently of target content.
   const identities = new Set();
   for (const a of document.querySelectorAll('nav a[href], aside a[href], [role="navigation"] a[href]')) {
-    if (!visible(a)) continue;
-    const label = [text(a), a.getAttribute('aria-label'), ...Array.from(a.querySelectorAll('img')).map(img=>img.getAttribute('alt'))].filter(Boolean);
-    if (!label.some(s => /^(profile|프로필)$/i.test(s))) continue;
-    try { const u = new URL(a.getAttribute('href'),location.origin), m = u.pathname.match(/^\/([A-Za-z0-9._]{1,30})\/?$/); if (u.origin === current.origin && m) identities.add(m[1].toLowerCase()); } catch {}
+    const name = profileName(a);
+    if (visible(a) && !inContent(a) && name && profileLabel(a,name)) identities.add(name);
+  }
+  for (const a of document.querySelectorAll('a[href]')) {
+    if (!visible(a) || inContent(a)) continue;
+    const name = profileName(a);
+    if (name && profileLabel(a,name) && navigationContext(a)) identities.add(name);
   }
   if (identities.size !== 1) return fail('account_unverified');
   if (![...identities].every(name=>name === expectedAccount)) return fail('account_mismatch');
-  const headers = [...document.querySelectorAll('main header')].filter(h => visible(h) && [...h.querySelectorAll('h1,h2')].some(n=>visible(n) && text(n).toLowerCase() === target));
+  let headers = [...document.querySelectorAll('main header')].filter(h => visible(h) && [...h.querySelectorAll('h1,h2')].some(n=>visible(n) && text(n).toLowerCase() === target));
+  if (!headers.length) {
+    const mains = [...document.querySelectorAll('main,[role="main"]')].filter(visible);
+    if (mains.length !== 1) return fail('ambiguous_profile');
+    const main = mains[0], names = [...main.querySelectorAll('h1,h2,[role="heading"]')].filter(n=>visible(n) && text(n).toLowerCase() === target);
+    if (names.length !== 1) return fail('ambiguous_profile');
+    for (let parent=names[0].parentElement;parent && parent!==main;parent=parent.parentElement) {
+      // Never widen into posts/recommendations to find an unrelated Follow button.
+      const containsPost = [...parent.querySelectorAll('a[href]')].some(a => {
+        try { const u = new URL(a.getAttribute('href'),location.origin); return u.origin === current.origin && /^\/(p|reel|reels)\/[^/]+/.test(u.pathname); } catch { return false; }
+      });
+      if (parent.querySelector('article') || containsPost) break;
+      const links = [...parent.querySelectorAll('a[href]')].filter(visible).map(a=>{try { const u=new URL(a.getAttribute('href'),location.origin); return u.origin===current.origin ? u.pathname.replace(/\/$/,'') : ''; } catch { return ''; }});
+      const hasControls = [...parent.querySelectorAll('button,[role="button"]')].some(n=>visible(n) && ['Follow','팔로우','Following','팔로잉','Requested','요청됨'].includes(text(n)));
+      if (hasControls && links.includes(`/${target}/followers`) && links.includes(`/${target}/following`)) { headers=[parent]; break; }
+    }
+  }
   if (headers.length !== 1) return fail('ambiguous_profile');
   const controls = [...headers[0].querySelectorAll('button,[role="button"]')].filter(visible);
   const following = controls.filter(n=>['Following','팔로잉'].includes(text(n)));

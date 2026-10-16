@@ -1,6 +1,6 @@
 # SpyMedia Instagram 선택 팔로우 도구
 
-Chrome 또는 Edge에서 검토한 Instagram 계정을 순서대로 팔로우하는 별도의 Manifest V3 확장 기능입니다. Instagram 공식 API가 아니며 Instagram의 운영 정책과 활동 제한이 적용됩니다. 제한을 우회하거나 숨기는 기능, 자동 로그인, CAPTCHA 처리, 프록시, 무작위 동작, 비공개 API, 자동 재시도는 없습니다.
+Chrome 또는 Edge에서 검토한 Instagram 계정을 순서대로 팔로우하는 Manifest V3 확장 기능입니다. 0.2.0부터 관리자 화면에서 선택·확인·실행·결과 확인을 처리합니다. Instagram 공식 API가 아니며 Instagram의 운영 정책과 활동 제한이 적용됩니다. 제한을 우회하거나 숨기는 기능, 자동 로그인, CAPTCHA 처리, 프록시, 무작위 동작, 비공개 API, 자동 재시도는 없습니다.
 
 **실제 Instagram 화면에서의 동작은 아직 검증하지 않았습니다.** 현재 검증은 합성 DOM과 모의 Chrome API로 실시합니다. Instagram 화면 구조가 다르면 아무 팔로우도 하지 않고 중지하도록 설계했습니다. 사용자 계정의 실사용 검증은 별도 확인 후 해야 합니다.
 
@@ -10,8 +10,9 @@ Chrome 또는 Edge에서 검토한 Instagram 계정을 순서대로 팔로우하
 2. Chrome은 `chrome://extensions`, Edge는 `edge://extensions`를 열고 개발자 모드를 켭니다.
 3. ‘압축해제된 확장 프로그램을 로드합니다’로 `manifest.json`이 들어 있는 폴더를 선택합니다.
 4. **같은 브라우저 프로필**에서 SpyMedia 관리자와 Instagram `spymedia_kr` 계정에 직접 로그인합니다. Codex의 내장 브라우저와 일반 Chrome 로그인은 별개입니다.
-5. 관리자 페이지를 새로고침한 뒤 Instagram 검색 결과를 검토하고 최대 10개를 선택해 준비합니다.
-6. 열린 확장 기능 탭에서 실행 계정과 대상 목록을 다시 확인하고 동의 체크 후 시작합니다. 준비하거나 체크하는 것만으로 팔로우하지 않습니다.
+5. 기존 설치가 있다면 새 파일로 교체한 다음 확장 기능 관리 화면에서 새로고침을 눌러 버전 **0.2.0**을 적용합니다. 관리자 페이지도 새로고침해야 새 브리지가 연결됩니다.
+6. 관리자에서 Instagram 검색 결과를 검토하고 최대 10개를 선택한 뒤 실행 계정과 대상 목록을 확인하고 팔로우를 시작합니다. 준비하거나 체크하는 것만으로 팔로우하지 않습니다.
+7. 작업 중에는 관리자 화면을 유지합니다. 확장 기능이 Instagram 탭 하나를 비활성 상태로 열어 선택한 대상만 순서대로 처리하고, 관리자 화면에 결과를 돌려줍니다. 사용자가 각 Instagram 팔로우 버튼을 직접 누를 필요는 없습니다. 로그인·추가 인증 화면이 나오면 직접 처리한 뒤 새 작업을 준비합니다.
 
 브라우저에 확장 기능을 설치하는 것은 사용자가 수행하는 별도 단계입니다. Render 배포만으로 PC 브라우저에 자동 설치되지 않습니다. 스토어 등록이나 새 유료 서비스는 필요하지 않습니다.
 
@@ -24,15 +25,16 @@ Chrome 또는 Edge에서 검토한 Instagram 계정을 순서대로 팔로우하
 - 검색어, 검색 결과 설명, 개인 정보, 토큰은 전달받지 않습니다. 선택한 정규 프로필 URL만 사용합니다.
 - 대상과 결과는 확장 기능의 메모리에만 존재합니다. `chrome.storage`, DB, 로그, 파일, localStorage, sessionStorage, 실행기 URL 등에 저장하지 않습니다. 서비스 워커가 재시작되면 작업은 소실되며 자동 재개하지 않습니다.
 - 실제 Instagram 방문은 일반 브라우저 탐색이므로 현재 프로필이 주소창과 **브라우저 자체 방문 기록**에 남을 수 있습니다. 확장 기능은 브라우저의 방문 기록을 별도로 읽거나 저장하지 않습니다.
-- Instagram 탭 하나를 열어 대상별로 이동합니다. 계정 이름을 탐색 메뉴의 명시적인 ‘Profile/프로필’ 링크로 확인하고, 본문 프로필 헤더의 이름과 대상 URL도 함께 확인합니다.
+- Instagram 탭 하나를 비활성 상태로 열어 대상별로 이동합니다. 관리자 창의 초점을 강제로 옮기지 않습니다. 계정 이름을 탐색 메뉴의 명시적인 프로필 링크로 확인하고, 본문 프로필 이름과 대상 URL도 함께 확인합니다.
+- 첫 클릭 전 계정/프로필 식별 요소가 늦게 표시되는 경우에만 최대 8초 동안 화면을 읽으며 기다립니다. 로그인·추가 인증·계정 불일치·다른 대상 URL이면 즉시 중지합니다. 이 대기는 팔로우 재시도가 아닙니다.
 - 정확한 ‘Follow/팔로우’ 버튼 하나만 클릭합니다. ‘Following/팔로잉’ 및 ‘Requested/요청됨’은 건너뜁니다. 추천 목록 버튼, ‘Follow back/맞팔로우’, 알 수 없는 언어, 여러 후보 버튼은 클릭하지 않습니다.
 - 한 번 클릭한 뒤 표시 상태가 바뀌었는지 읽기만 합니다. 불명확하면 중지하며 다시 클릭하지 않습니다. 비공개 계정의 ‘요청 전송’은 ‘팔로우 완료’와 구분합니다.
-- 중간 오류가 발생해도 앞서 확인한 완료 결과와 현재 확인이 필요한 행은 원래 유효 시간 동안 실행기에 남습니다. 명시적인 작업 지우기, 창 닫기, 관리자 이탈·로그아웃, 만료 시에는 목록과 결과를 지웁니다.
+- 중간 오류가 발생해도 앞서 확인한 완료 결과와 현재 확인이 필요한 행은 원래 유효 시간 동안 관리자에 남습니다. 명시적인 작업 지우기, 관리자 이탈·로그아웃, 만료 시에는 목록과 결과를 지웁니다.
 - 관리자 로그아웃·이탈·탭 닫기, 실행기 또는 작업용 Instagram 탭 닫기, TTL 만료, 계정 불일치, 로그인·추가 인증·제한 화면에서 중지합니다. 중지 전에 완료된 팔로우는 취소하지 않습니다.
 
 ### 화면 구조 제한
 
-현재 DOM 계약은 탐색 영역 `nav`, `aside`, `[role="navigation"]`의 명시적인 ‘Profile/프로필’ 링크와 `main header` 안의 일치하는 `h1/h2` 이름을 필요로 합니다. 이 영역이 없는 Instagram 버전은 안전하게 중지합니다. 동작하지 않는다고 전체 페이지의 아무 ‘팔로우’ 버튼이나 선택하는 식으로 완화하면 잘못된 계정을 팔로우할 수 있으므로 금지합니다. 실제 화면을 확인한 후 계정과 대상 식별 조건을 보존하면서 호환성을 수정해야 합니다.
+DOM 계약은 독립적인 탐색 영역에서 확인한 현재 계정과 본문의 정확한 대상 프로필을 함께 요구합니다. 화면 구조 때문에 계정을 식별할 수 없다는 오류가 로그아웃을 뜻하지는 않습니다. 관리자와 Instagram을 같은 브라우저 프로필에서 사용하는지 확인해 주세요. 식별할 수 없는 Instagram 버전은 중지합니다. 전체 페이지의 아무 ‘팔로우’ 버튼이나 선택하는 식으로 완화하면 잘못된 계정을 팔로우할 수 있으므로 금지합니다.
 
 ## 관리자 인터페이스
 
@@ -41,18 +43,29 @@ Chrome 또는 Edge에서 검토한 Instagram 계정을 순서대로 팔로우하
 ```js
 {
   source: 'spymedia-admin-follow', type: 'PREPARE', requestId: crypto.randomUUID(),
-  platform: 'instagram', expectedAccount: 'spymedia_kr',
+  platform: 'instagram', expectedAccount: 'spymedia_kr', control: 'admin',
   profiles: ['https://www.instagram.com/reviewed_studio/'],
   expiresAt: Date.now() + 15 * 60 * 1000
 }
 ```
 
-`PING`과 `CANCEL`은 `source`, `type`, `requestId`만 받습니다. 관리자 측은 로그아웃·작업 취소 시 같은 `requestId`로 `CANCEL`을 보내야 합니다. 브리지도 `pagehide` 때 취소합니다. 응답의 `source`는 `spymedia-follow-extension`이고 `type`은 `READY`, `ACCEPTED`, `ERROR`이며, 일치하는 `requestId`와 버전 `0.1.0`을 포함합니다. `ERROR`에는 제한된 오류 코드만 포함합니다. `ACCEPTED`는 확장 기능에 준비한 상태이며 팔로우 성공을 뜻하지 않습니다. 실제 결과는 실행기 창에만 표시합니다.
+`PING`, `STATUS`, `CANCEL`은 `source`, `type`, `requestId`만 받습니다. `START`는 여기에 `confirmed: true`가 필요하고, `STEP`은 `index`가 필요합니다. 다른 키는 거부합니다. `START`는 한 번만 허용하며, `STEP`은 현재 인덱스에서 하나씩 처리합니다. 동일 단계 재요청·동시 요청은 실행하지 않습니다.
+
+모든 응답은 `source: 'spymedia-follow-extension'`, 원래 `requestId`, 요청을 나타내는 `action`, `version: '0.2.0'`을 포함합니다. `PING`의 응답은 `READY`, `CANCEL`의 응답은 `ACCEPTED`입니다. 관리자 제어 방식의 `PREPARE`, `START`, `STEP`, `STATUS` 성공 응답은 `STATE`와 다음 `job` 스냅샷을 반환합니다. 내부 capability는 관리자에 전달하지 않습니다.
+
+```js
+{ expectedAccount, profiles, expiresAt, index, started, running, terminalError,
+  results: [{ index: 0, state: 'followed' }] }
+```
+
+실패는 `ERROR`와 제한된 `code`를 반환합니다. `STEP` 실패 후 `STATUS`로 기존 결과와 `terminalError`를 조회할 수 있습니다. `results`의 정상 상태는 `followed`, `request_sent`, `following`, `requested`입니다. 앞의 둘은 이번 작업에서 확인한 완료/요청 전송, 뒤의 둘은 이미 팔로우/요청된 계정입니다. `running: false`와 결과를 함께 확인해야 하며 `ACCEPTED`는 팔로우 성공을 뜻하지 않습니다.
+
+제어 요청은 처음 준비한 관리자 탭과 정확히 같은 `requestId`에서만 받습니다. 관리자 측은 로그아웃·작업 취소 시 `CANCEL`을 보내며 브리지도 `pagehide` 때 취소합니다. 기존 `control` 없는 `PREPARE`는 이전 별도 실행기 방식과 호환되지만, 새 관리자 화면은 확장 기능 0.2.0 이상을 요구합니다.
 
 ## 테스트
 
-저장소 루트에서 `node --test admin-ui/tests/instagram-follow-extension.test.mjs`.
+저장소 루트에서 `node --test admin-ui/tests/instagram-follow-extension.test.mjs admin-ui/tests/instagram-follow-admin.test.mjs`.
 
-검증 범위: URL·계정·TTL·선택 수 검사, 원본 관리자 탭과 메시지 출처 검증, 메모리 만료·취소, 잘못된 계정/프로필·로그인·제한 화면, 이미 팔로우/요청, 추천 버튼·맞팔로우 무시, 명시적 실행 동의, 모의 Chrome 순차 동작 및 중복 단계 방지.
+검증 범위: URL·계정·TTL·선택 수 검사, 원본 관리자 탭과 메시지 출처 검증, 메모리 만료·취소, 잘못된 계정/프로필·로그인·제한 화면, 이미 팔로우/요청, 추천 버튼·맞팔로우 무시, 명시적 실행 동의, 모의 Chrome 순차 동작 및 중복 단계 방지, 관리자 STATE 프로토콜, 비활성 Instagram 탭, 최대 8초 읽기 전용 준비 대기, 동시 START/STEP 및 소유자 불일치 거부.
 
 미검증: 실제 Instagram DOM, 실제 계정 제한과 공개 팔로우 결과, 사용자의 브라우저 확장 설치와 세션 연동. 자동화를 플랫폼이 허용한다거나 일정 건수 이하가 안전하다는 보장은 하지 않습니다.
