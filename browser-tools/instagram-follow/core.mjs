@@ -2,7 +2,7 @@ export const ADMIN_ORIGIN = 'https://spymedia-backend.onrender.com';
 export const ACTOR = 'spymedia_kr';
 export const MAX_PROFILES = 10;
 export const MAX_TTL = 15 * 60 * 1000;
-export const VERSION = '0.2.1';
+export const VERSION = '0.2.2';
 export const RESERVED = new Set(['accounts','about','api','challenge','checkpoint','developer','developers','direct','directory','emails','explore','legal','oauth','p','press','privacy','reel','reels','reels_tab','settings','stories','terms','web','your_activity']);
 
 export function isAdminUrl(value) {

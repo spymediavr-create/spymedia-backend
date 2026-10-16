@@ -76,10 +76,37 @@ export function inspectInstagramPage({expectedAccount, targetUrl, mode = 'inspec
     }
   }
   if (headers.length !== 1) return fail('ambiguous_profile');
-  const controls = [...headers[0].querySelectorAll('button,[role="button"]')].filter(visible);
-  const following = controls.filter(n=>['Following','팔로잉'].includes(text(n)));
-  const requested = controls.filter(n=>['Requested','요청됨'].includes(text(n)));
-  const follow = controls.filter(n=>['Follow','팔로우'].includes(text(n)));
+  const header = headers[0];
+  const hasTargetHeading = node => [...node.querySelectorAll('h1,h2,[role="heading"]')].some(n=>visible(n) && text(n).toLowerCase() === target);
+  const isProfileAction = node => {
+    for (let parent=node;parent && parent!==header;parent=parent.parentElement) {
+      // Instagram can append suggested accounts inside the same semantic header
+      // after a follow. Those controls belong to other accounts, not this target.
+      if (parent.matches?.('article,ul,ol,li,[role="list"],[role="listitem"],[role="menu"],[role="menuitem"],[role="dialog"]')) return false;
+      if (parent.matches?.('a[href]') && profileName(parent) && profileName(parent)!==target) return false;
+      // The wider profile also contains biography and mutual-follow links. Stop
+      // at its verified heading rather than treating those links as a card.
+      if (parent!==node && hasTargetHeading(parent)) break;
+      if ([...parent.querySelectorAll('a[href]')].some(a=>visible(a) && profileName(a) && profileName(a)!==target)) return false;
+    }
+    return true;
+  };
+  const controls = [...header.querySelectorAll('button,[role="button"]')].filter(n=>visible(n) && isProfileAction(n));
+  const labels = ['Following','팔로잉','Requested','요청됨','Follow','팔로우'];
+  const candidates = controls.filter(n=>labels.includes(text(n)));
+  const contains = (outer,inner) => outer===inner || !!outer.contains?.(inner);
+  const actions = [...new Set(candidates.map(node=>{
+    // A native button and a same-label accessibility wrapper describe one
+    // control. Only collapse that unambiguous nesting; separate buttons and
+    // pure role-button chains must still fail closed.
+    const nested = candidates.filter(other=>contains(node,other) || contains(other,node));
+    const buttons = nested.filter(other=>other.tagName?.toUpperCase()==='BUTTON');
+    if (buttons.length===1 && nested.every(other=>text(other)===text(node) && (contains(buttons[0],other) || contains(other,buttons[0])))) return buttons[0];
+    return node;
+  }))];
+  const following = actions.filter(n=>['Following','팔로잉'].includes(text(n)));
+  const requested = actions.filter(n=>['Requested','요청됨'].includes(text(n)));
+  const follow = actions.filter(n=>['Follow','팔로우'].includes(text(n)));
   if (following.length + requested.length + follow.length !== 1) return fail(controls.length ? 'ambiguous_profile' : 'unsupported_language');
   if (following.length) return {ok:true,state:'following'};
   if (requested.length) return {ok:true,state:'requested'};
