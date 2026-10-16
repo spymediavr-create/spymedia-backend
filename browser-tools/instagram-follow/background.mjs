@@ -70,11 +70,15 @@ async function step(job, expectedIndex) {
       if (!clicked.ok) throw Object.assign(new Error(clicked.code),{code:clicked.code});
       if (clicked.state === 'clicked') {
         state = 'uncertain';
-        for (let i=0;i<8;i++) {
-          await delay(500);
+        const resultDeadline = Date.now() + 8000;
+        for (let i=0;i<16;i++) {
+          await delay(Math.min(500,Math.max(0,resultDeadline-Date.now())));
           const after = await runDom(job,targetUrl,'inspect');
-          if (!after.ok) throw Object.assign(new Error(after.code),{code:after.code});
-          if (['following','requested'].includes(after.state)) { state = after.state === 'following' ? 'followed' : 'request_sent'; break; }
+          // React can replace the profile/button immediately after the single click.
+          // Read through that transient state; never click again to verify a result.
+          if (!after.ok && !['ambiguous_profile','account_unverified'].includes(after.code)) throw Object.assign(new Error(after.code),{code:after.code});
+          if (after.ok && ['following','requested'].includes(after.state)) { state = after.state === 'following' ? 'followed' : 'request_sent'; break; }
+          if (Date.now() >= resultDeadline) break;
         }
         if (state === 'uncertain') throw Object.assign(new Error('uncertain'),{code:'uncertain'});
       } else state = clicked.state;

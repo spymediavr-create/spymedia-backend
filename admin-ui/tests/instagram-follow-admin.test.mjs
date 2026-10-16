@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
-import {EphemeralJobs,isAdminUrl,ACTOR,validatePreparation,validateAdminCommand} from '../../browser-tools/instagram-follow/core.mjs';
+import {EphemeralJobs,isAdminUrl,ACTOR,VERSION,validatePreparation,validateAdminCommand} from '../../browser-tools/instagram-follow/core.mjs';
 
 const origin='https://spymedia-backend.onrender.com';
 const target='https://www.instagram.com/reviewed_studio/';
@@ -105,12 +105,43 @@ test('selection TTL is never extended; expiry, owner departure and cancellation 
 });
 
 test('uncertain click result is terminal and preserves previous results without re-click',async()=>{
-  const responses=[{ok:true,state:'following'},{ok:true,state:'follow'},{ok:true,state:'clicked'},...Array.from({length:8},()=>({ok:true,state:'follow'}))];
+  const responses=[{ok:true,state:'following'},{ok:true,state:'follow'},{ok:true,state:'clicked'},...Array.from({length:16},()=>({ok:true,state:'follow'}))];
   const b=await browser({responses});await b.send(prep({profiles:[target,second]}));await b.command('START',{confirmed:true});
   assert.equal((await b.command('STEP',{index:0})).job.results[0].state,'following');
   assert.equal((await b.command('STEP',{index:1})).code,'uncertain');const state=(await b.command('STATUS')).job;
   assert.equal(state.index,1);assert.equal(state.results.length,1);assert.equal(state.terminalError,'uncertain');
   assert.equal((await b.command('STEP',{index:1})).code,'not_confirmed');assert.equal(b.calls.filter(c=>c.mode==='click').length,1);
+});
+
+test('post-click transient profile replacement and account rendering resolve without another click',async()=>{
+  for(const [code,ending,result] of [['ambiguous_profile','following','followed'],['account_unverified','requested','request_sent']]){
+    const b=await browser({responses:[{ok:true,state:'follow'},{ok:true,state:'clicked'},{ok:false,code},{ok:true,state:'follow'},{ok:true,state:ending}]});
+    await b.send(prep());await b.command('START',{confirmed:true});const done=await b.command('STEP',{index:0});
+    assert.equal(done.ok,true);assert.equal(done.job.results[0].state,result);assert.equal(done.job.terminalError,null);
+    assert.deepEqual(b.calls.map(call=>call.mode),['inspect','click','inspect','inspect','inspect']);
+    assert.equal(b.waits.filter(ms=>ms===500).length,3);assert.equal(b.calls.filter(call=>call.mode==='click').length,1);
+    assert.equal((await b.command('STEP',{index:0})).code,'not_confirmed');
+  }
+});
+
+test('post-click authentication, restriction, identity and other errors halt on the first read',async()=>{
+  for(const code of ['login_required','challenge','account_mismatch','wrong_profile','browser_error','unsupported_language']){
+    const b=await browser({responses:[{ok:true,state:'follow'},{ok:true,state:'clicked'},{ok:false,code}]});
+    await b.send(prep());await b.command('START',{confirmed:true});assert.equal((await b.command('STEP',{index:0})).code,code);
+    assert.equal(b.calls.length,3);assert.equal(b.waits.filter(ms=>ms===500).length,1);
+    assert.equal((await b.command('STATUS')).job.terminalError,code);assert.equal((await b.command('STEP',{index:0})).code,'not_confirmed');
+    assert.equal(b.calls.filter(call=>call.mode==='click').length,1);
+  }
+});
+
+test('post-click unresolved render errors end uncertain after eight seconds and never repeat the click',async()=>{
+  for(const code of ['ambiguous_profile','account_unverified']){
+    const b=await browser({responses:[{ok:true,state:'follow'},{ok:true,state:'clicked'},...Array.from({length:16},()=>({ok:false,code}))]});
+    await b.send(prep());await b.command('START',{confirmed:true});assert.equal((await b.command('STEP',{index:0})).code,'uncertain');
+    assert.equal(b.calls.length,18);assert.equal(b.now(),9250);assert.equal(b.waits.filter(ms=>ms===500).length,16);
+    assert.equal((await b.command('STATUS')).job.terminalError,'uncertain');assert.equal((await b.command('START',{confirmed:true})).code,'not_confirmed');
+    assert.equal((await b.command('STEP',{index:0})).code,'not_confirmed');assert.equal(b.calls.filter(call=>call.mode==='click').length,1);
+  }
 });
 
 test('bridge reports versioned admin STATE with matching action and rejects unexpected keys',async()=>{
@@ -119,7 +150,7 @@ test('bridge reports versioned admin STATE with matching action and rejects unex
   const job={expectedAccount:ACTOR,profiles:[target],expiresAt:61000,index:0,started:false,running:false,terminalError:null,results:[]};
   vm.runInNewContext(script,{location:{origin,pathname:'/admin'},window:win,chrome:{runtime:{sendMessage:async m=>{calls.push(m);return ['PREPARE','START','STEP','STATUS'].includes(m.message.type)?{ok:true,job}:{ok:true};}}}});
   const send=m=>handlers.message({source:win,origin,data:m});
-  await send({source,type:'PING',requestId});assert.equal(replies.at(-1).type,'READY');assert.equal(replies.at(-1).version,'0.2.0');
+  await send({source,type:'PING',requestId});assert.equal(replies.at(-1).type,'READY');assert.equal(replies.at(-1).version,VERSION);
   for(const m of [prep(),{source,type:'START',requestId,confirmed:true},{source,type:'STEP',requestId,index:0},{source,type:'STATUS',requestId}]){
     await send(m);assert.equal(replies.at(-1).type,'STATE');assert.equal(replies.at(-1).action,m.type);assert.equal(replies.at(-1).requestId,requestId);assert.equal('capability' in replies.at(-1).job,false);
   }

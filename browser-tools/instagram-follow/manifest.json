@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SpyMedia Instagram 선택 팔로우",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "관리자에서 선택·확인한 Instagram 프로필을 같은 화면에서 순서대로 팔로우하고 결과를 표시합니다. 실제 Instagram 화면 호환성은 별도 검증이 필요합니다.",
   "permissions": ["scripting"],
   "host_permissions": ["https://www.instagram.com/*", "https://spymedia-backend.onrender.com/*"],
