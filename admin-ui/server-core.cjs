@@ -19,6 +19,7 @@ assets.set('/admin-assets/search-result-url.js', 'search-result-url.js');
 assets.set('/admin-assets/account-tabs.js', 'account-tabs.js');
 assets.set('/admin-assets/account-tabs.css', 'account-tabs.css');
 assets.set('/admin-assets/follow-actions.js', 'follow-actions.js');
+assets.set('/admin-assets/follow-exclusions.js', 'follow-exclusions.js');
 assets.set('/admin-assets/follow-actions.css', 'follow-actions.css');
 // Serve only the browser runtime's known files, never expose node_modules as a directory.
 const vendorAssets = new Map();
@@ -145,10 +146,14 @@ function createAdminHandler(options = {}) {
           json(res,200,await service.xFollows.execute(await readJson(req)));
         }else if(/^\/api\/admin\/x\/follows\/result\/[a-f0-9-]{36}$/.test(route)&&req.method==='GET'&&!url.search){
           json(res,200,await service.xFollows.result(route.split('/').pop()));
+        }else if(route==='/api/admin/instagram/follow-exclusions'&&['GET','POST','DELETE'].includes(req.method)){
+          if(url.search)throw Object.assign(new Error(),{status:400,code:'invalid_follow_exclusion'});
+          const value=req.method==='GET'?await service.instagramFollowExclusions.list():req.method==='POST'?await service.instagramFollowExclusions.save(await readJson(req)):await service.instagramFollowExclusions.remove(await readJson(req));
+          json(res,200,value);
         }else if(route==='/api/admin/temporary-search'&&req.method==='POST'){
           if(url.search)throw Object.assign(new Error(),{status:400,code:'invalid_temporary_search'});
           res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');
-          json(res,200,await service.temporarySearch.search(await readJson(req)));
+          json(res,200,await service.searchTemporaryAccounts(await readJson(req)));
         }else if(route==='/api/admin/candidates'&&req.method==='GET'){
           const keys=[...url.searchParams.keys()];
           if(keys.some(key=>!['platform','status','industry','region','q','offset','limit'].includes(key))||new Set(keys).size!==keys.length)throw Object.assign(new Error(),{status:400,code:'invalid_candidate_query'});

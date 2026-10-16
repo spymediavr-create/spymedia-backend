@@ -19,9 +19,11 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
   const help=node('details'),summary=node('summary','Instagram 도구 설치·실행 방법');
   help.append(summary,node('p',`확장 도구 ${IG_VERSION} 이상이 필요합니다. 압축을 풀고 Chrome 또는 Edge의 확장 프로그램 관리에서 개발자 모드 → 압축 해제된 확장 프로그램 로드로 설치하세요. 이전 버전은 파일을 교체하고 확장 프로그램의 새로고침 버튼을 누르세요. 같은 브라우저 프로필에서 SNS 관리자와 Instagram에 로그인한 뒤 관리자 화면도 새로고침하세요.`),node('p','이 관리자 화면에서 실행 계정 spymedia_kr와 선택 목록을 확인하고 시작합니다. Instagram 탭은 뒤에서 열리며 도구가 팔로우 버튼을 누릅니다. 진행 중에는 그 탭의 팔로우 버튼을 직접 누르지 마세요. 로그인·보안 확인·화면 불일치·불확실한 결과가 있으면 중지하며 자동 재시도하지 않습니다. 확장 설치 권한은 사용자가 직접 허용합니다.'));
   const feedback=node('p');feedback.id=prefix+'-follow-feedback';feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite');
+  const exclusionFeedback=node('p',undefined,'field-hint');exclusionFeedback.id=prefix+'-follow-exclusions';exclusionFeedback.setAttribute('role','status');exclusionFeedback.setAttribute('aria-live','polite');exclusionFeedback.hidden=true;
   const review=node('div');review.id=prefix+'-follow-review';
-  actions.append(run,stop,download);box.append(title,hint,actions,help,feedback,review);mount.before(box);
-  let key='',requestId=null,busy=false,expired=false,version=0,prepared=null,pending=null,igReview=null,igState=null,expiryTimer;
+  actions.append(run,stop,download);box.append(title,hint,actions,help,feedback,exclusionFeedback,review);mount.before(box);
+  let key='',requestId=null,busy=false,expired=false,version=0,prepared=null,pending=null,igReview=null,igState=null,expiryTimer,exclusionSaved=0,exclusionFailed=0;
+  function clearExclusions(){exclusionSaved=exclusionFailed=0;exclusionFeedback.textContent='';exclusionFeedback.hidden=true;}
   const post=value=>window.postMessage({source:'spymedia-admin-follow',...value},location.origin);
   function cancel(){version++;prepared=null;igReview=null;igState=null;review.replaceChildren();clearTimeout(expiryTimer);if(pending){clearTimeout(pending.timer);pending.reject(Object.assign(Error('cancelled'),{code:'cancelled'}));pending=null;}if(requestId){post({type:'CANCEL',requestId});requestId=null;}busy=false;}
   function selection(){
@@ -31,7 +33,7 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
   }
   function update(){
     const current=selection(),next=JSON.stringify([current.platform,current.profiles,current.invalid,current.expiresAt]);
-    if(next!==key){cancel();feedback.textContent='';key=next;}
+    if(next!==key){cancel();feedback.textContent='';clearExclusions();key=next;}
     const instagram=current.platform==='instagram',x=current.platform==='x',available=!!status.authenticated&&!expired&&!current.disabled;
     box.hidden=!['instagram','x','blog'].includes(current.platform);
     download.hidden=help.hidden=!instagram;download.setAttribute('aria-disabled',String(!status.authenticated));
@@ -59,6 +61,22 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
     if(action==='START')return job.started&&job.running&&job.index===0;
     return action==='STEP'&&job.started&&job.index===prior.index+1&&job.running===(job.index<selected.profiles.length)&&JSON.stringify(job.results.slice(0,-1))===JSON.stringify(prior.results);
   }
+  async function saveConfirmedExclusion(selected,result,mine){
+    // Save only the latest validated result. A storage error must never retry a follow.
+    const username=new URL(selected.profiles[result.index]).pathname.split('/')[1];
+    let saved=false;
+    try{
+      const response=await fetch('/api/admin/instagram/follow-exclusions',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':status.csrfToken},body:JSON.stringify({account:'spymedia_kr',items:[{username,state:result.state}]}),signal:AbortSignal.timeout(10000)});
+      if(response.status===401){window.dispatchEvent(new Event('sns-auth-expired'));return;}
+      const data=await response.json();
+      if(response.status===403&&data?.error==='csrf_rejected'){window.dispatchEvent(new Event('sns-auth-expired'));return;}
+      saved=response.ok&&data.saved===1;
+    }catch{}
+    if(mine!==version)return;
+    if(saved)exclusionSaved++;else exclusionFailed++;
+    exclusionFeedback.hidden=false;
+    exclusionFeedback.textContent=(exclusionSaved?`확인된 팔로잉·요청 계정 ${exclusionSaved}개를 다음 검색에서 제외합니다. `:'')+(exclusionFailed?`${exclusionFailed}개 계정의 검색 제외 기록을 저장하지 못했습니다. 위 팔로우 결과는 유지되며 다음 검색에 다시 나올 수 있습니다. 팔로우를 다시 실행하지 마세요.`:'');
+  }
   async function startInstagram(selected,mine){
     if(igReview!==selected||mine!==version||busy||expired||Date.now()>=selected.expiresAt)return;
     busy=true;requestId=crypto.randomUUID();renderInstagram(selected,null,'연결 확인 중');update();feedback.textContent='Instagram 확장 도구 버전 확인 중…';
@@ -74,6 +92,7 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
         const prior=igState;renderInstagram(selected,prior,'계정 확인·팔로우 진행 중');feedback.textContent=`Instagram ${prior.index+1}/${selected.profiles.length} 처리 중… 관리자 화면에서 기다려 주세요.`;
         const response=await bridge('STEP',{index:prior.index},45000);if(mine!==version)return;
         if(!validJob(response.job,selected,'STEP',prior))throw Object.assign(Error('invalid_message'),{code:'invalid_message'});igState=response.job;renderInstagram(selected,igState);
+        await saveConfirmedExclusion(selected,igState.results.at(-1),mine);if(mine!==version)return;
       }
       feedback.textContent='선택한 Instagram 계정 처리가 끝났습니다. 각 계정의 팔로우 완료·요청 전송·기존 상태를 확인하세요.';
     }catch(error){
@@ -91,6 +110,7 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
   run.addEventListener('click',async()=>{
     update();if(run.disabled)return;const current=selection(),mine=++version;busy=true;update();
     if(current.platform==='instagram'){
+      clearExclusions();
       clearTimeout(expiryTimer);igReview={profiles:[...current.profiles],expiresAt:Math.min(current.expiresAt||Date.now()+900000,Date.now()+900000)};igState=null;const selected=igReview;
       renderInstagram(selected,null);const confirm=node('button','확인한 Instagram 계정 팔로우 시작','outline-button');confirm.type='button';confirm.id=prefix+'-instagram-follow-start';review.append(confirm);busy=false;
       feedback.textContent='위 실행 계정과 선택한 대상을 확인하세요. 아래 시작 버튼을 누르면 Instagram 탭에서 도구가 팔로우를 실행합니다.';
@@ -125,5 +145,5 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
   });
   window.addEventListener('pagehide',cancel);
   window.addEventListener('sns-auth-expired',()=>{expired=true;cancel();feedback.textContent=ERRORS.authentication_required;update();});
-  update();return {update,clear:()=>{cancel();key='';feedback.textContent='';}};
+  update();return {update,clear:()=>{cancel();key='';feedback.textContent='';clearExclusions();}};
 }

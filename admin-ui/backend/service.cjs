@@ -9,6 +9,7 @@ const {Connectors} = require('./connectors.cjs');
 const {Catalog} = require('./catalog.cjs');
 const {Candidates} = require('./candidates.cjs');
 const {TemporarySearch} = require('./temporary-search.cjs');
+const {InstagramFollowExclusions} = require('./instagram-follow-exclusions.cjs');
 const {XFollows} = require('./x-follows.cjs');
 const {Photos}=require('./photos.cjs');
 const {Reels,LIMIT:REEL_LIMIT}=require('./reels.cjs');
@@ -22,12 +23,19 @@ class Service {
     this.catalog=new Catalog(this.store,this.jobs);
     this.candidates=new Candidates(this.store);
     this.temporarySearch=options.temporarySearch||new TemporarySearch(this.settings);
+    this.instagramFollowExclusions=options.instagramFollowExclusions||new InstagramFollowExclusions(this.store);
     this.xFollows=options.xFollows||new XFollows(this.settings,this.store,this.connectors.xAuth);
     this.photos=options.photos||new Photos(this.store);
     this.reels=options.reels||new Reels(this.settings,this.store);
     this.youtubeSource=options.youtubeSource||new YouTubeSource(this.settings,this.photos);
     this.diagnosticNow=options.diagnosticNow||Date.now;this.facebookCheckBusy=false;this.facebookCheckNextAt=0;this.xCheckBusy=false;this.xCheckNextAt=0;
     this.instagramCheckBusy=false;this.instagramCheckNextAt=0;
+  }
+  async searchTemporaryAccounts(body){
+    // Check the exclusion store before a paid provider request, not after it fails.
+    if(body?.platform==='instagram')await this.instagramFollowExclusions.ready();
+    const result=await this.temporarySearch.search(body);
+    return this.instagramFollowExclusions.filter(body.platform,result);
   }
   async checkInstagramConnection(){
     const now=this.diagnosticNow();
