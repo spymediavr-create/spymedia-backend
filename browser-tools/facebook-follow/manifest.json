@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "SpyMedia Facebook 선택 팔로우",
+  "version": "0.1.0",
+  "description": "SNS 관리자에서 선택하고 확인한 Facebook 프로필을 스파이미디어 페이지로 팔로우하고 결과를 표시합니다.",
+  "permissions": ["scripting"],
+  "host_permissions": ["https://www.facebook.com/*", "https://spymedia-backend.onrender.com/*"],
+  "background": {"service_worker": "background.mjs", "type": "module"},
+  "content_scripts": [{
+    "matches": ["https://spymedia-backend.onrender.com/admin*"],
+    "js": ["bridge.js"],
+    "run_at": "document_idle",
+    "all_frames": false
+  }],
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'"}
+}

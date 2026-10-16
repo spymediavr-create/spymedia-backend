@@ -19,6 +19,7 @@ assets.set('/admin-assets/search-result-url.js', 'search-result-url.js');
 assets.set('/admin-assets/account-tabs.js', 'account-tabs.js');
 assets.set('/admin-assets/account-tabs.css', 'account-tabs.css');
 assets.set('/admin-assets/follow-actions.js', 'follow-actions.js');
+assets.set('/admin-assets/facebook-follow-actions.js', 'facebook-follow-actions.js');
 assets.set('/admin-assets/follow-exclusions.js', 'follow-exclusions.js');
 assets.set('/admin-assets/follow-actions.css', 'follow-actions.css');
 // Serve only the browser runtime's known files, never expose node_modules as a directory.
@@ -139,6 +140,10 @@ function createAdminHandler(options = {}) {
         }else if(route==='/api/admin/tools/instagram-follow.zip'&&['GET','HEAD'].includes(req.method)&&!url.search){
           const archive=await fs.readFile(path.join(__dirname,'downloads/instagram-follow.zip'));
           res.writeHead(200,{'Content-Type':'application/zip','Content-Length':archive.length,'Content-Disposition':'attachment; filename="spymedia-instagram-follow.zip"'});
+          res.end(req.method==='HEAD'?undefined:archive);
+        }else if(route==='/api/admin/tools/facebook-follow.zip'&&['GET','HEAD'].includes(req.method)&&!url.search){
+          const archive=await fs.readFile(path.join(__dirname,'downloads/facebook-follow.zip'));
+          res.writeHead(200,{'Content-Type':'application/zip','Content-Length':archive.length,'Content-Disposition':'attachment; filename="spymedia-facebook-follow.zip"'});
           res.end(req.method==='HEAD'?undefined:archive);
         }else if(route==='/api/admin/x/follows/prepare'&&req.method==='POST'&&!url.search){
           json(res,200,await service.xFollows.prepare(await readJson(req)));
