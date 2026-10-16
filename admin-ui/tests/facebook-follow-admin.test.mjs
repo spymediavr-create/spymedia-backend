@@ -9,6 +9,8 @@ const moduleUrl=source=>'data:text/javascript;base64,'+Buffer.from(source).toStr
 const source=await fs.readFile(new URL('../public/facebook-follow-actions.js',import.meta.url),'utf8');
 const searchSource=await fs.readFile(new URL('../public/search-result-url.js',import.meta.url),'utf8');
 const {normalizeFacebookFollowSelection:selection,validateFacebookFollowJob:valid,FACEBOOK_FOLLOW_ACTOR:ACTOR,FACEBOOK_FOLLOW_NAME:NAME}=await import(moduleUrl(source.replace("'./search-result-url.js'",JSON.stringify(moduleUrl(searchSource)))));
+const exclusionsSource=await fs.readFile(new URL('../public/facebook-follow-exclusions.js',import.meta.url),'utf8');
+const {parseFacebookFollowExclusionInput:parseExclusions,validFacebookFollowExclusionList:validExclusions}=await import(moduleUrl(exclusionsSource.replace("'./search-result-url.js'",JSON.stringify(moduleUrl(searchSource)))));
 const selected={profiles:['https://www.facebook.com/fixture.page','https://www.facebook.com/profile.php?id=123456789'],expiresAt:123456};
 const prepared=()=>({expectedAccount:ACTOR,expectedName:NAME,profiles:[...selected.profiles],expiresAt:selected.expiresAt,index:0,started:false,running:false,terminalError:null,results:[]});
 
@@ -41,6 +43,19 @@ test('Facebook STEP cannot skip/repeat indices, rewrite previous outcome, or rep
   assert.equal(valid(finish,selected,'STEP',null),false);assert.equal(valid(finish,selected,'UNKNOWN',previous),false);
 });
 
+test('Facebook exclusion management normalizes distinct profile URLs, accepts numeric aliases and rejects non-profiles/self/bulk input',()=>{
+  assert.deepEqual(parseExclusions('https://m.facebook.com/Fixture.Page?tracking=1\nhttps://www.facebook.com/fixture.page, https://www.facebook.com/people/Fixture/123456789/'),selected.profiles);
+  assert.deepEqual(parseExclusions('https://www.facebook.com/123456789?tracking=1'),[selected.profiles[1]]);
+  for(const value of [null,[],42,'','\n  ','fixture.page','http://www.facebook.com/fixture','https://evil.invalid/fixture','https://user:pass@www.facebook.com/fixture','https://www.facebook.com:8443/fixture','https://www.facebook.com/fixture/posts/123','https://www.facebook.com/reel/123','https://www.facebook.com/profile.php?id='+ACTOR,'https://www.facebook.com/'+ACTOR,'https://www.facebook.com/me',...['friends','notifications','messages','search','business','ads','policies','terms'].map(name=>'https://www.facebook.com/'+name),Array.from({length:11},(_,i)=>'https://www.facebook.com/fixture'+i).join('\n'),'x'.repeat(21001)])assert.equal(parseExclusions(value),null);
+});
+
+test('Facebook exclusion list verifies actor, canonical profiles, confirmed following states and minimal records',()=>{
+  const record={profileUrl:selected.profiles[0],state:'following',confirmedAt:'2026-10-16T12:00:00.000Z'};
+  const list={account:ACTOR,items:[record]};assert.equal(validExclusions(list),true);assert.equal(validExclusions({account:ACTOR,items:[]}),true);
+  for(const patch of [{profileUrl:'https://m.facebook.com/fixture.page'},{profileUrl:'https://www.facebook.com/123456789'},{profileUrl:'https://www.facebook.com/profile.php?id='+ACTOR},{profileUrl:'https://www.facebook.com/search'},{profileUrl:'https://www.facebook.com/fixture/posts/123'},{state:'followed'},{state:'unknown'},{confirmedAt:'not a date'},{confirmedAt:12345},{query:'never store'}])assert.equal(validExclusions({...list,items:[{...record,...patch}]}),false);
+  assert.equal(validExclusions({...list,account:'other'}),false);assert.equal(validExclusions({...list,items:{}}),false);assert.equal(validExclusions({...list,items:[null]}),false);assert.equal(validExclusions({...list,items:[record,record]}),false);
+});
+
 test('Facebook download is authenticated, exact-route only, read-only and served as attachment',async t=>{
   const salt=randomBytes(16),password=randomBytes(24).toString('hex');
   const service={settings:{production:false},status:async()=>({})};
@@ -52,6 +67,7 @@ test('Facebook download is authenticated, exact-route only, read-only and served
   const login=await fetch(origin+'/api/admin/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({username:'fixture',password})});assert.equal(login.status,200);
   const Cookie=login.headers.get('set-cookie').split(';')[0],headers={Cookie};
   const asset=await fetch(origin+'/admin-assets/facebook-follow-actions.js');assert.equal(asset.status,200);assert.match(await asset.text(),/attachFacebookFollowActions/);
+  const exclusionsAsset=await fetch(origin+'/admin-assets/facebook-follow-exclusions.js');assert.equal(exclusionsAsset.status,200);assert.match(await exclusionsAsset.text(),/attachFacebookFollowExclusions/);
   const archive=await fetch(origin+route,{headers});assert.equal(archive.status,200);assert.equal(archive.headers.get('cache-control'),'no-store');assert.equal(archive.headers.get('content-type'),'application/zip');assert.match(archive.headers.get('content-disposition'),/^attachment;/);assert.equal(Buffer.from(await archive.arrayBuffer()).readUInt32LE(0),0x04034b50);
   const head=await fetch(origin+route,{method:'HEAD',headers});assert.equal(head.status,200);assert.equal((await head.arrayBuffer()).byteLength,0);
   for(const suffix of ['?file=other','/../private.zip'])assert.equal((await fetch(origin+route+suffix,{headers})).status,404);

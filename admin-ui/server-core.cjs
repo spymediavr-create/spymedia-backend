@@ -20,6 +20,7 @@ assets.set('/admin-assets/account-tabs.js', 'account-tabs.js');
 assets.set('/admin-assets/account-tabs.css', 'account-tabs.css');
 assets.set('/admin-assets/follow-actions.js', 'follow-actions.js');
 assets.set('/admin-assets/facebook-follow-actions.js', 'facebook-follow-actions.js');
+assets.set('/admin-assets/facebook-follow-exclusions.js', 'facebook-follow-exclusions.js');
 assets.set('/admin-assets/follow-exclusions.js', 'follow-exclusions.js');
 assets.set('/admin-assets/follow-actions.css', 'follow-actions.css');
 // Serve only the browser runtime's known files, never expose node_modules as a directory.
@@ -154,6 +155,10 @@ function createAdminHandler(options = {}) {
         }else if(route==='/api/admin/instagram/follow-exclusions'&&['GET','POST','DELETE'].includes(req.method)){
           if(url.search)throw Object.assign(new Error(),{status:400,code:'invalid_follow_exclusion'});
           const value=req.method==='GET'?await service.instagramFollowExclusions.list():req.method==='POST'?await service.instagramFollowExclusions.save(await readJson(req)):await service.instagramFollowExclusions.remove(await readJson(req));
+          json(res,200,value);
+        }else if(route==='/api/admin/facebook/follow-exclusions'&&['GET','POST','DELETE'].includes(req.method)){
+          if(url.search)throw Object.assign(new Error(),{status:400,code:'invalid_follow_exclusion'});
+          const value=req.method==='GET'?await service.facebookFollowExclusions.list():req.method==='POST'?await service.facebookFollowExclusions.save(await readJson(req)):await service.facebookFollowExclusions.remove(await readJson(req));
           json(res,200,value);
         }else if(route==='/api/admin/temporary-search'&&req.method==='POST'){
           if(url.search)throw Object.assign(new Error(),{status:400,code:'invalid_temporary_search'});
