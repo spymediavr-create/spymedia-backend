@@ -1,5 +1,6 @@
 import {PAGE_SIZE,candidatePageInfo,candidatePageNumbers} from './candidate-pagination.js';
 import {REGION_OPTIONS,normalizeRegionFilter,externalRegionTerms} from './candidate-regions.js';
+import {attachFollowActions} from './follow-actions.js';
 const PLATFORMS={instagram:'Instagram',facebook:'Facebook',x:'X',blog:'네이버 블로그'};
 const STATUSES={pending:'검토 중',excluded:'제외',done:'팔로우 완료 (수동 기록)'};
 const FIELDS=['platform','accountName','profileUrl','industry','region','reason','note'];
@@ -23,6 +24,7 @@ export function attachCandidates(status){
   $('candidate-regions').replaceChildren(...REGION_OPTIONS.map(value=>{const option=node('option');option.value=value;if(['광주광역시','전라남도'].includes(value))option.label='통용 지역명 · 기존 데이터 호환';return option;}));
   let platform='instagram',filter={status:'all',industry:'',region:'',q:''},offset=0,page={items:[],total:0,selectedCount:0},busy=false,expired=false,loaded=false,editing=null;
   const available=!!status.authenticated&&!!status.storageReady;
+  const follow=attachFollowActions({mount:$('candidates-list'),prefix:'candidates',status,getSelection:()=>({platform,profiles:page.items.filter(item=>item.selected).map(item=>item.profileUrl),disabled:!available||busy||expired})});
   function searchLink(){
     const value=externalSearchUrl(platform,$('candidates-query').value,$('candidates-region').value),link=$('candidates-external');
     link.hidden=!value;$('candidates-external-empty').hidden=!!value;
@@ -38,6 +40,7 @@ export function attachCandidates(status){
     root.querySelectorAll('[data-candidate-page]').forEach(button=>{button.disabled=!available||busy||expired||Number(button.dataset.candidatePage)===candidatePageInfo(page.total,offset).currentPage;});
     searchLink();
     $('candidates-selection').textContent='이 페이지 '+selected+'개 선택';
+    follow.update();
   }
   function expire(){expired=true;$('candidates-login').hidden=false;$('candidates-feedback').textContent=ERRORS.authentication_required;controls();}
   window.addEventListener('sns-auth-expired',expire);

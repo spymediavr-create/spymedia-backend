@@ -9,6 +9,7 @@ const {Connectors} = require('./connectors.cjs');
 const {Catalog} = require('./catalog.cjs');
 const {Candidates} = require('./candidates.cjs');
 const {TemporarySearch} = require('./temporary-search.cjs');
+const {XFollows} = require('./x-follows.cjs');
 const {Photos}=require('./photos.cjs');
 const {Reels,LIMIT:REEL_LIMIT}=require('./reels.cjs');
 const {YouTubeSource}=require('./youtube-source.cjs');
@@ -21,6 +22,7 @@ class Service {
     this.catalog=new Catalog(this.store,this.jobs);
     this.candidates=new Candidates(this.store);
     this.temporarySearch=options.temporarySearch||new TemporarySearch(this.settings);
+    this.xFollows=options.xFollows||new XFollows(this.settings,this.store,this.connectors.xAuth);
     this.photos=options.photos||new Photos(this.store);
     this.reels=options.reels||new Reels(this.settings,this.store);
     this.youtubeSource=options.youtubeSource||new YouTubeSource(this.settings,this.photos);
@@ -62,7 +64,9 @@ class Service {
   }
   async status() {
     let storage=false;try{if(this.settings.storageConfigured){await this.store.init();storage=true;}}catch{}
-    return {temporarySearch:this.temporarySearch.describe(),uploadsConnected:storage,storageReady:storage,reelsUploadReady:storage,reelMaxBytes:REEL_LIMIT,conversionReady:false,youtubeImportReady:!!this.settings.env.YOUTUBE_API_KEY,legacyPreparationDisabled:!this.settings.legacyPreparationEnabled,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,instagramConnection:this.connectors.describeInstagramConnection?.()||{credentialsConfigured:false,mediaDeliveryConfigured:false,publishingEnabled:false,publishingPermissionsVerified:false},xConnection:this.connectors.xAuth?.describe()||{authMode:null,credentialsConfigured:false,refreshConfigured:false,costAcknowledged:false,publishingPermissionsVerified:false},channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
+    const xFollow=this.xFollows.status();
+    xFollow.ready=xFollow.ready&&storage;
+    return {xFollow,temporarySearch:this.temporarySearch.describe(),uploadsConnected:storage,storageReady:storage,reelsUploadReady:storage,reelMaxBytes:REEL_LIMIT,conversionReady:false,youtubeImportReady:!!this.settings.env.YOUTUBE_API_KEY,legacyPreparationDisabled:!this.settings.legacyPreparationEnabled,postingConnected:false,publishingEnabled:this.settings.publishingEnabled,instagramConnection:this.connectors.describeInstagramConnection?.()||{credentialsConfigured:false,mediaDeliveryConfigured:false,publishingEnabled:false,publishingPermissionsVerified:false},xConnection:this.connectors.xAuth?.describe()||{authMode:null,credentialsConfigured:false,refreshConfigured:false,costAcknowledged:false,publishingPermissionsVerified:false},channels:Object.fromEntries(Object.entries(this.connectors.availability()).map(([channel,configured])=>[channel,{configured,verified:false}]))};
   }
   signedUrl(asset) {
     if(!this.settings.mediaKey||!this.settings.origin)throw error(503,'media_delivery_unavailable');

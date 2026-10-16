@@ -18,6 +18,8 @@ assets.set('/admin-assets/temporary-search.css', 'temporary-search.css');
 assets.set('/admin-assets/search-result-url.js', 'search-result-url.js');
 assets.set('/admin-assets/account-tabs.js', 'account-tabs.js');
 assets.set('/admin-assets/account-tabs.css', 'account-tabs.css');
+assets.set('/admin-assets/follow-actions.js', 'follow-actions.js');
+assets.set('/admin-assets/follow-actions.css', 'follow-actions.css');
 // Serve only the browser runtime's known files, never expose node_modules as a directory.
 const vendorAssets = new Map();
 for (const file of ['index.js','classes.js','const.js','errors.js','types.js','utils.js','worker.js']) {
@@ -133,6 +135,16 @@ function createAdminHandler(options = {}) {
           const body=await readJson(req);json(res,202,{jobs:await service.jobs.start(body.ids)});
         }else if(route==='/api/admin/jobs/retry'&&req.method==='POST'){
           const body=await readJson(req);json(res,202,{jobs:await service.jobs.retry(body.id)});
+        }else if(route==='/api/admin/tools/instagram-follow.zip'&&['GET','HEAD'].includes(req.method)&&!url.search){
+          const archive=await fs.readFile(path.join(__dirname,'downloads/instagram-follow.zip'));
+          res.writeHead(200,{'Content-Type':'application/zip','Content-Length':archive.length,'Content-Disposition':'attachment; filename="spymedia-instagram-follow.zip"'});
+          res.end(req.method==='HEAD'?undefined:archive);
+        }else if(route==='/api/admin/x/follows/prepare'&&req.method==='POST'&&!url.search){
+          json(res,200,await service.xFollows.prepare(await readJson(req)));
+        }else if(route==='/api/admin/x/follows/execute'&&req.method==='POST'&&!url.search){
+          json(res,200,await service.xFollows.execute(await readJson(req)));
+        }else if(/^\/api\/admin\/x\/follows\/result\/[a-f0-9-]{36}$/.test(route)&&req.method==='GET'&&!url.search){
+          json(res,200,await service.xFollows.result(route.split('/').pop()));
         }else if(route==='/api/admin/temporary-search'&&req.method==='POST'){
           if(url.search)throw Object.assign(new Error(),{status:400,code:'invalid_temporary_search'});
           res.setHeader('Pragma','no-cache');res.setHeader('Expires','0');

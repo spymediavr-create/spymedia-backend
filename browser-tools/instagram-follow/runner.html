@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Instagram 선택 팔로우 · SpyMedia</title><link rel="stylesheet" href="runner.css"></head>
+<body><main><p class="eyebrow">SPYMEDIA · 별도 브라우저 도구</p><h1>선택한 Instagram 계정 팔로우</h1>
+<p>실행 계정 <strong>@spymedia_kr</strong></p><p>선택한 프로필을 마지막으로 확인하세요. 시작하면 Instagram 탭 하나에서 순서대로 실행합니다. 이미 팔로우했거나 요청한 계정은 건너뜁니다.</p>
+<p class="notice">Instagram 공식 API 기능이 아닙니다. 실제 Instagram 화면과의 호환성은 아직 검증하지 않았습니다. 계정 확인 실패·추가 인증·활동 제한·불명확한 결과가 나오면 즉시 중지하며 자동 재시도하지 않습니다.</p>
+<p id="expiry"></p><ol id="targets"></ol>
+<label class="confirm"><input type="checkbox" id="confirmed" disabled> @spymedia_kr 계정과 위 대상들을 확인했으며, 이 대상에 대한 실제 팔로우 실행에 동의합니다.</label>
+<div class="actions"><button id="start" disabled>확인한 계정 팔로우 시작</button><button id="stop" disabled>중지하고 작업 지우기</button></div>
+<p id="status" role="status" aria-live="polite">관리자에서 전달한 작업을 확인하는 중입니다.</p>
+<p class="small">관리자 또는 이 창을 닫거나 로그아웃하면 작업을 중지합니다. 최대 15분 뒤 대상 목록과 결과를 메모리에서 지웁니다. 팔로우 결과는 이 창에만 표시됩니다. 중지 전에 완료된 팔로우는 취소하지 않습니다.</p></main><script type="module" src="runner.mjs"></script></body></html>
