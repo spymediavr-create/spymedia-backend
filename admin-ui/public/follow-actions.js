@@ -1,5 +1,6 @@
 import {searchResultUrl} from './search-result-url.js';
 import {attachFacebookFollowActions} from './facebook-follow-actions.js';
+import {attachNaverNeighborActions} from './naver-neighbor-actions.js';
 
 const node=(tag,text,cls)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;};
 const ERRORS={x_follow_disabled:'X 팔로우 실행 설정이 꺼져 있습니다. 기존 인증과 비용 조건을 확인한 뒤 운영자가 활성화해야 합니다.',x_follow_unconfigured:'X 팔로우 인증 또는 저장소 설정을 확인하세요.',x_cost_ack_required:'X API 이용 비용 확인이 필요합니다.',x_follow_busy:'다른 X 팔로우 확인이 진행 중입니다.',x_follow_rate_limited:'연속 요청을 중단했습니다. 잠시 뒤 직접 다시 확인하세요.',x_follow_expired:'대상 확인 시간이 지났습니다. 다시 검토하세요.',account_mismatch:'로그인 계정이 지정된 스파이미디어 계정과 다릅니다.',x_follow_self:'자기 계정은 팔로우할 수 없습니다.',x_unauthorized:'X 인증을 확인하세요. 토큰을 자동 변경하지 않습니다.',x_forbidden:'X 접근 또는 follows.write 권한을 확인하세요.',x_payment_required:'X API 이용 상태와 비용 한도를 확인하세요.',x_rate_limited:'X 요청 제한으로 중단했습니다.',storage_unavailable:'작업 기록 저장소를 확인하세요.',authentication_required:'관리자 로그인이 만료됐습니다.'};
@@ -13,6 +14,7 @@ const IG_ERRORS={account_unverified:'Instagram 화면에서 실행 계정을 식
 // Selections and preparations are held only in this page, never in browser storage.
 export function attachFollowActions({mount,status,getSelection,prefix}){
   const facebook=attachFacebookFollowActions({mount,status,getSelection,prefix});
+  const naver=attachNaverNeighborActions({mount,status,getSelection,prefix});
   const box=node('section',undefined,'follow-actions');box.id=prefix+'-follow';
   const title=node('h3','선택한 계정 팔로우'),hint=node('p',undefined,'field-hint'),actions=node('div',undefined,'candidate-actions');
   const run=node('button','선택 계정 확인','outline-button');run.type='button';run.id=prefix+'-follow-prepare';
@@ -35,10 +37,11 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
   }
   function update(){
     facebook.update();
+    naver.update();
     const current=selection(),next=JSON.stringify([current.platform,current.profiles,current.invalid,current.expiresAt]);
     if(next!==key){cancel();feedback.textContent='';clearExclusions();key=next;}
     const instagram=current.platform==='instagram',x=current.platform==='x',available=!!status.authenticated&&!expired&&!current.disabled;
-    box.hidden=!['instagram','x','blog'].includes(current.platform);
+    box.hidden=!['instagram','x'].includes(current.platform);
     download.hidden=help.hidden=!instagram;download.setAttribute('aria-disabled',String(!status.authenticated));
     run.hidden=current.platform==='blog';run.textContent=instagram?'선택한 Instagram 계정 팔로우':'선택한 X 계정 확인';
     run.disabled=!available||busy||current.invalid>0||(instagram?(!!requestId||current.profiles.length<1||current.profiles.length>10):(current.profiles.length!==1||!status.xFollow?.ready));
@@ -148,5 +151,5 @@ export function attachFollowActions({mount,status,getSelection,prefix}){
   });
   window.addEventListener('pagehide',cancel);
   window.addEventListener('sns-auth-expired',()=>{expired=true;cancel();feedback.textContent=ERRORS.authentication_required;update();});
-  update();return {update,clear:()=>{facebook.clear();cancel();key='';feedback.textContent='';clearExclusions();}};
+  update();return {update,clear:()=>{facebook.clear();naver.clear();cancel();key='';feedback.textContent='';clearExclusions();}};
 }
