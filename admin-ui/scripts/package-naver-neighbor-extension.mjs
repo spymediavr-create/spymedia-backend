@@ -7,7 +7,7 @@ const folder=fileURLToPath(new URL('../../browser-tools/naver-neighbor/',import.
 const output=fileURLToPath(new URL('../downloads/naver-neighbor.zip',import.meta.url));
 const files=['README.md','background.mjs','bridge.js','core.mjs','dom-agent.mjs','manifest.json'].sort();
 const manifest=JSON.parse(await fs.readFile(path.join(folder,'manifest.json'),'utf8'));
-if(manifest.manifest_version!==3||manifest.version!=='0.1.0')throw Error('Unexpected Naver extension manifest');
+if(manifest.manifest_version!==3||manifest.version!=='0.1.1')throw Error('Unexpected Naver extension manifest');
 function crc32(bytes){let crc=0xffffffff;for(const byte of bytes){crc^=byte;for(let i=0;i<8;i++)crc=crc&1?(crc>>>1)^0xedb88320:crc>>>1;}return(crc^0xffffffff)>>>0;}
 const pieces=[],central=[];let offset=0;
 for(const file of files){

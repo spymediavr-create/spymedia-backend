@@ -10,12 +10,22 @@ const selected={profiles:['https://blog.naver.com/fixture_one','https://blog.nav
 const prepared=()=>({expectedAccount:ACTOR,expectedName:ACTOR,profiles:[...selected.profiles],expiresAt:selected.expiresAt,index:0,started:false,running:false,terminalError:null,results:[]});
 
 test('Naver missing or ambiguous advertising group errors explain why execution stopped without suggesting another group',()=>{
-  assert.match(errorMessage('group_missing'),/광고 그룹을 찾지 못해 중지/);
-  assert.match(errorMessage('group_ambiguous'),/광고 그룹을 하나로 확인하지 못해 중지/);
+  assert.match(errorMessage('group_missing'),/광고업체 그룹을 찾지 못해 중지/);
+  assert.match(errorMessage('group_ambiguous'),/광고업체 그룹을 하나로 확인하지 못해 중지/);
   for(const code of ['group_missing','group_ambiguous'])assert.match(errorMessage(code),/다른 그룹을 선택하거나 새 그룹을 만들지 않았습니다/);
   assert.match(errorMessage('authentication_check_failed'),/관리자 로그인 상태/);
   const fallback=errorMessage('unknown');
   for(const code of ['__proto__','constructor','toString',null,undefined,{},['group_missing']])assert.equal(errorMessage(code),fallback);
+});
+
+test('Naver popup errors identify the failed stage and never interpret automation failure as approval waiting',()=>{
+  assert.match(errorMessage('popup_not_found'),/팝업을 찾지 못해 중지/);
+  assert.match(errorMessage('popup_binding'),/선택한 블로그의 이웃추가 창인지 확인하지 못해 중지/);
+  assert.match(errorMessage('choice_unrecognized'),/일반 이웃 선택 단계/);
+  assert.match(errorMessage('group_unrecognized'),/광고업체 그룹 선택 단계/);
+  assert.match(errorMessage('result_unconfirmed'),/전송 후 완료 화면/);
+  for(const code of ['choice_unrecognized','group_unrecognized','result_unconfirmed'])assert.match(errorMessage(code),/상대방의 승인 대기가 아닙니다/);
+  assert.match(errorMessage('extension_update'),/0\.1\.1 이상/);
 });
 
 test('Naver selection maps only explicit blog/post URLs to canonical blogs, deduplicates, and reports derived reasons',()=>{
@@ -40,7 +50,7 @@ test('Naver canonical profile deduplication allows distinct-blog counting while 
 });
 
 test('Naver job validation requires the exact actor, reviewed blogs, selection TTL, and confirmed PREPARE/START state',()=>{
-  assert.equal(ACTOR,'spymedia');assert.equal(VERSION,'0.1.0');const first=prepared();assert.equal(valid(first,selected,'PREPARE'),true);
+  assert.equal(ACTOR,'spymedia');assert.equal(VERSION,'0.1.1');const first=prepared();assert.equal(valid(first,selected,'PREPARE'),true);
   assert.equal(valid({...first,started:true,running:true},selected,'START'),true);
   for(const patch of [{expectedAccount:'other'},{expectedName:'스파이미디어'},{profiles:[selected.profiles[1],selected.profiles[0]]},{profiles:['https://blog.naver.com/other']},{expiresAt:123457},{started:1},{running:'true'},{index:-1},{index:3},{terminalError:'uncertain'},{capability:'never expose'}])assert.equal(valid({...first,...patch},selected,'PREPARE'),false);
   assert.equal(valid({...first,results:{}},selected,'PREPARE'),false);assert.equal(valid(null,selected,'PREPARE'),false);

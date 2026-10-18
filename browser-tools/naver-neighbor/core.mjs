@@ -6,7 +6,7 @@ export const ACTOR_NAME=ACTOR;
 export const SOURCE='spymedia-admin-naver-neighbor';
 export const MAX_PROFILES=10;
 export const MAX_TTL=15*60*1000;
-export const VERSION='0.1.0';
+export const VERSION='0.1.1';
 export const RESERVED=new Set(['me','myblog','admin','login','logout','help','search','feed','postlist','postview','bloghome','blogpeople','neighbor','neighbors','buddy','buddyadd','manage','settings','write','section','service','notice']);
 
 export function isAdminUrl(value){

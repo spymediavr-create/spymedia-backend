@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>네이버 :: 이웃추가</title>
+  <!-- Sanitized from the user-provided BuddyAdd group-stage markup.
+       No identity, hidden form fields, remote assets, original handlers or API calls.
+       Test-only handlers are attached by naver-neighbor-popup-test.mjs. -->
+  <style>
+    body { font: 16px sans-serif; padding: 24px; }
+    .popup_buddy { width: 430px; }
+    .popup_heading { margin-bottom: 24px; }
+    .buddy_state { border: 1px solid #ddd; padding: 20px; }
+    .present_selected, .item, .area_button a, .button_group_add { display: inline-block; padding: 10px; }
+    .area_dropdown { display: inline-block; }
+    .dropdown_select { border: 1px solid #ddd; }
+    .dropdown_select[aria-hidden="true"] { display: none; }
+    .dropdown_select .item { display: block; }
+    .area_button { margin-top: 28px; }
+  </style>
+</head>
+<body>
+<form name="buddyFrm">
+  <div class="area_layer_popup">
+    <div class="popup_buddy">
+      <fieldset>
+        <legend>이웃추가</legend>
+        <div class="popup_heading">
+          <h1 class="title" aria-hidden="true">이웃추가</h1>
+        </div>
+        <div class="popup_text">
+          <div class="buddy_state">
+            <p class="text_buddy_add"><strong class="name_buddy">테스트블로그</strong>님을 추가할 그룹을 선택해주세요.</p>
+            <div class="group_add">
+              <div class="area_dropdown" data-set="popup_buddy_group">
+                <a href="#" class="present_selected _selectedGroup _ignoreBodyClick" role="button" aria-haspopup="true" aria-expanded="false">
+                  <strong class="text_present_selected _selectedGroupName">새그룹</strong>
+                  <i class="sp_common icon_arrow"></i>
+                </a>
+                <div class="dropdown_select _groupList" aria-hidden="true">
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="true">새그룹</a>
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="false">새그룹</a>
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="false">새그룹</a>
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="false">새그룹</a>
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="false">새그룹</a>
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="false">새그룹</a>
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="false">드론촬영</a>
+                  <a href="#" class="item _selectGroup _ignoreBodyClick" aria-selected="false">광고업체</a>
+                </div>
+              </div>
+              <a href="#" class="button_group_add _addNewGroupForm" role="button"><i class="sp_common icon_plus"></i>그룹추가</a>
+            </div>
+            <div class="group_name _newGroup" style="display:none">
+              <span class="wrap_text">
+                <input type="checkbox" id="newGroupCheck" class="checkbox_group">
+                <label for="newGroupCheck" class="label_check"><span class="blind">새로 추가한 그룹 선택</span></label>
+                <label for="newGroupName" class="label_group">새 그룹 명</label>
+                <input type="text" id="newGroupName" class="input_text_box" value="새 그룹">
+              </span>
+              <div class="area_dropdown" data-set="popup_buddy_open">
+                <a href="#" class="present_selected _selectOpenType" role="button" aria-haspopup="true" aria-expanded="false">
+                  <strong class="text_present_selected _selectedGroupOpenTypeName">공개</strong>
+                </a>
+                <div class="dropdown_select _openTypeList" aria-hidden="true">
+                  <a href="#" class="item _openType" aria-selected="false">공개</a>
+                  <a href="#" class="item _openType" aria-selected="false">비공개</a>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tip_box">
+            <p>이웃과 서로이웃은 무엇인가요?</p>
+            <p>이웃공개, 서로이웃공개 글은 누가 볼 수 있게 되나요?</p>
+            <p>블로그 이용 TIP 더보기</p>
+          </div>
+        </div>
+        <div class="area_button">
+          <a href="#" class="button_cancel" role="button">취소</a>
+          <a href="#" class="button_next _addBuddy" role="button">다음</a>
+        </div>
+      </fieldset>
+    </div>
+  </div>
+</form>
+</body>
+</html>

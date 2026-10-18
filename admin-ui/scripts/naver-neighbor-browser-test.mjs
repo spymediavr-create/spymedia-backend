@@ -47,8 +47,8 @@ try{
     const jobs=new Map();
     window.addEventListener('message',event=>{
       const message=event.data;if(message?.source!=='spymedia-admin-naver-neighbor')return;window.__neighborMessages.push(message);
-      const reply=(type,detail={})=>window.postMessage({source:'spymedia-naver-neighbor-extension',type,action:message.type,requestId:message.requestId,version:'0.1.0',...detail},location.origin);
-      if(message.type==='PING'){reply('READY',{version:window.__neighborMode==='old'?'0.0.9':'0.1.0'});return;}
+      const reply=(type,detail={})=>window.postMessage({source:'spymedia-naver-neighbor-extension',type,action:message.type,requestId:message.requestId,version:'0.1.1',...detail},location.origin);
+      if(message.type==='PING'){reply('READY',{version:window.__neighborMode==='old'?'0.1.0':'0.1.1'});return;}
       if(message.type==='CANCEL'){jobs.delete(message.requestId);return;}
       if(message.type==='PREPARE'){
         if(message.control!=='admin'||message.platform!=='blog')throw Error('Invalid Naver control protocol');
@@ -68,7 +68,7 @@ try{
         if(message.index!==job.index)throw Error('Duplicate or skipped Naver STEP');
         const done=()=>{job.results.push({index:job.index,state:window.__neighborMode==='existing'||job.index%2?'existing':'added'});job.index++;job.running=job.index<job.profiles.length;reply('STATE',{job:structuredClone(job)});};
         if(window.__neighborMode==='hold'){window.__releaseNeighborStep=done;return;}
-        if(['account_mismatch','account_unverified','login_required','challenge','security_limit','rate_limited','uncertain','mutual_only'].includes(window.__neighborMode)){reply('ERROR',{code:window.__neighborMode});return;}
+        if(['account_mismatch','account_unverified','login_required','challenge','security_limit','rate_limited','uncertain','mutual_only','popup_not_found','popup_binding','choice_unrecognized','group_unrecognized','result_unconfirmed','group_missing','group_ambiguous'].includes(window.__neighborMode)){reply('ERROR',{code:window.__neighborMode});return;}
         if(window.__neighborMode==='bad-result'){job.results.push({index:job.index,state:'mutual_requested'});job.index++;job.running=job.index<job.profiles.length;reply('STATE',{job});return;}
         if(window.__neighborMode==='rewritten-history'&&job.index===1){job.results[0].state='existing';done();return;}
         if(window.__neighborMode==='foreign-message'){
@@ -88,7 +88,7 @@ try{
   const finished=()=>page.waitForFunction(()=>document.getElementById('temporary-search-naver-neighbor-feedback').textContent.includes('처리가 끝났습니다'));
   const begin=async(mode='normal',all=false)=>{await page.evaluate(mode=>{window.__neighborMode=mode;window.__releaseNeighborStep=null;},mode);await search();if(all)await page.locator('#temporary-search-all').check();else await page.locator('[data-search-select]').first().check();await button.click();await page.locator('#temporary-search-naver-neighbor-start').click();};
   await idle();assert.equal(await card.isVisible(),false);assert.equal(searchCalls,0);
-  await search();assert.equal(await card.isVisible(),true);assert.equal(await page.locator('#temporary-search-facebook-follow').isVisible(),false);assert.equal(await button.isDisabled(),true);
+  await search();assert.equal(await card.isVisible(),true);assert.match(await card.textContent(),/기존 광고업체 그룹/);assert.match(await card.textContent(),/상대방의 승인이 필요하지 않습니다/);assert.match(await card.textContent(),/두 버전을 함께 설치하지 마세요/);assert.equal(await card.getByRole('link',{name:'네이버 이웃추가 도구 0.1.1 받기'}).getAttribute('href'),'/api/admin/tools/naver-neighbor.zip');assert.equal(await page.locator('#temporary-search-facebook-follow').isVisible(),false);assert.equal(await button.isDisabled(),true);
   await page.locator('#temporary-search-all').check();await button.click();assert.equal(await review.locator('li').count(),10);assert.match(await review.textContent(),/spymedia · 일반 이웃추가/);assert.equal(await page.evaluate(()=>window.__neighborMessages.length),0);
   const initialStatusChecks=statusChecks;await page.locator('#temporary-search-naver-neighbor-start').click();await finished();assert.equal(statusChecks,initialStatusChecks+11,'Session is checked before connecting and before every one of the ten STEP actions');
   let messages=await page.evaluate(()=>window.__neighborMessages),prepared=messages.find(message=>message.type==='PREPARE');
@@ -107,8 +107,8 @@ try{
   for(const mode of ['old','wrong-account','wrong-name','wrong-profiles','wrong-expiry','extra-field']){
     const before=await page.evaluate(()=>window.__neighborMessages.length);await begin(mode);await page.waitForFunction(()=>/이상이 필요|응답을 검증하지 못/.test(document.getElementById('temporary-search-naver-neighbor-feedback').textContent));messages=await page.evaluate(start=>window.__neighborMessages.slice(start),before);assert.equal(messages.filter(message=>message.type==='STEP').length,0);assert.ok(messages.some(message=>message.type==='CANCEL'));
   }
-  for(const mode of ['account_mismatch','account_unverified','login_required','challenge','security_limit','rate_limited','uncertain','mutual_only','bad-result','rewritten-history']){
-    const before=await page.evaluate(()=>window.__neighborMessages.length);await begin(mode,true);await page.waitForFunction(()=>document.getElementById('temporary-search-naver-neighbor-feedback').textContent.includes('자동 재시도하지 않습니다'));messages=await page.evaluate(start=>window.__neighborMessages.slice(start),before);assert.equal(messages.filter(message=>message.type==='STEP').length,mode==='rewritten-history'?2:1);assert.ok(messages.some(message=>message.type==='CANCEL'));assert.match(await review.textContent(),/중지 · 결과 확인 필요/);assert.equal(await button.isDisabled(),true);
+  for(const mode of ['account_mismatch','account_unverified','login_required','challenge','security_limit','rate_limited','uncertain','mutual_only','popup_not_found','popup_binding','choice_unrecognized','group_unrecognized','result_unconfirmed','group_missing','group_ambiguous','bad-result','rewritten-history']){
+    const before=await page.evaluate(()=>window.__neighborMessages.length);await begin(mode,true);await page.waitForFunction(()=>document.getElementById('temporary-search-naver-neighbor-feedback').textContent.includes('자동 재시도하지 않습니다'));messages=await page.evaluate(start=>window.__neighborMessages.slice(start),before);assert.equal(messages.filter(message=>message.type==='STEP').length,mode==='rewritten-history'?2:1);assert.ok(messages.some(message=>message.type==='CANCEL'));if(['choice_unrecognized','group_unrecognized','result_unconfirmed'].includes(mode))assert.match(await feedback.textContent(),/상대방의 승인 대기가 아닙니다/);if(['group_missing','group_ambiguous','group_unrecognized'].includes(mode))assert.match(await feedback.textContent(),/광고업체/);assert.match(await review.textContent(),/중지 · 결과 확인 필요/);assert.equal(await button.isDisabled(),true);
   }
   console.log('PASS version, actor/name, exact profile/expiry/schema/history validation and terminal login/security/uncertain errors without retry');
   await begin('foreign-message');await page.waitForFunction(()=>!!window.__releaseNeighborStep);assert.doesNotMatch(await feedback.textContent(),/처리가 끝났습니다/);await page.evaluate(()=>window.__releaseNeighborStep());await finished();

@@ -15,8 +15,8 @@ async function mockBrowser(options={}){
   let now=1000,nextTab=3,actorChecks=0,hook=null;
   const tabs=new Map([[1,{id:1,url:adminOrigin+'/admin',status:'complete',documentId:'admin-1'}],[2,{id:2,url:adminOrigin+'/admin',status:'complete',documentId:'admin-2'}]]);
   const events={},calls=[],navigations=[],removed=[],waits=[];
-  const dialogStates=new Map(),dialogSelected=new Map(),generations=new Map();
-  const model={tabs,events,calls,navigations,removed,dialogStates,dialogSelected,advanceDocument:id=>{
+  const dialogStates=new Map(),dialogSelected=new Map(),dialogExpanded=new Map(),pendingExpand=new Map(),pendingSelect=new Map(),generations=new Map();
+  const model={tabs,events,calls,navigations,removed,dialogStates,dialogSelected,dialogExpanded,advanceDocument:id=>{
     generations.set(id,(generations.get(id)||0)+1);tabs.get(id).documentId=`document-${id}-${generations.get(id)}`;
   },actorChecks:()=>actorChecks};
   const addTab=attrs=>{const tab={id:nextTab++,status:'complete',...attrs};tabs.set(tab.id,tab);model.advanceDocument(tab.id);events.created?.(tab);return tab;};
@@ -32,6 +32,8 @@ async function mockBrowser(options={}){
     else assert.deepEqual(Array.from(surface.frameIds),[0]);
     const input=args[0],call={func:func.name,...input,tabId:surface.tabId,url:tabs.get(surface.tabId)?.url,pinned:Boolean(surface.documentIds)};calls.push(call);
     if(hook)await hook(call,model);
+    if(surface.documentIds&&surface.documentIds[0]!==tabs.get(surface.tabId)?.documentId)throw Error('Stale document before execution');
+    const executedDocumentId=tabs.get(surface.tabId)?.documentId;
     let result;
     if(func.name==='resolveNaverContent'){
       result={ok:true,url:NAVER_ORIGIN+'/PostList.naver?blogId='+new URL(input.targetUrl).pathname.slice(1)};
@@ -51,19 +53,32 @@ async function mockBrowser(options={}){
     }else if(func.name==='inspectNaverDialog'){
       const phase=dialogStates.get(surface.tabId);
       if(input.stage!==phase)result={ok:false,code:'ambiguous_dialog'};
-      else if(input.mode==='inspect')result={ok:true,state:phase==='result'?'added':phase};
+      else if(input.mode==='inspect'){
+        for(const [pending,finish]of [[pendingExpand,()=>dialogExpanded.set(surface.tabId,true)],[pendingSelect,()=>{dialogExpanded.set(surface.tabId,false);dialogSelected.set(surface.tabId,'광고업체');}]]){
+          if(pending.has(surface.tabId)){
+            const remaining=pending.get(surface.tabId)-1;pending.set(surface.tabId,remaining);
+            if(remaining<=0){pending.delete(surface.tabId);finish();}
+          }
+        }
+        result=phase==='group'?{ok:true,state:'group',kind:options.custom?'custom':'native',expanded:dialogExpanded.get(surface.tabId)===true,selected:dialogSelected.get(surface.tabId)==='광고업체'}:{ok:true,state:phase==='result'?'added':phase};
+      }
       else if(input.mode==='next'){
         assert.equal(phase,'choice');result={ok:true,state:'advanced'};
         tabs.get(surface.tabId).url=NAVER_ORIGIN+'/BuddyAdd.naver';dialogStates.set(surface.tabId,'group');model.advanceDocument(surface.tabId);
+      }else if(input.mode==='expand'){
+        assert.equal(phase,'group');assert.equal(options.custom,true);
+        pendingExpand.set(surface.tabId,options.expandDelay||1);result={ok:true,state:'expanded'};
       }else if(input.mode==='select'){
-        assert.equal(phase,'group');assert.equal(input.groupName,'광고');dialogSelected.set(surface.tabId,'광고');result={ok:true,state:'selected'};
+        assert.equal(phase,'group');assert.equal(input.groupName,'광고업체');
+        if(options.custom)assert.equal(dialogExpanded.get(surface.tabId),true,'Custom option cannot be clicked before visible expansion');
+        pendingSelect.set(surface.tabId,options.selectDelay||1);result={ok:true,state:'selected'};
       }else if(input.mode==='submit'){
-        assert.equal(phase,'group');assert.equal(dialogSelected.get(surface.tabId),'광고');result={ok:true,state:'submitted'};
+        assert.equal(phase,'group');assert.equal(dialogSelected.get(surface.tabId),'광고업체');result={ok:true,state:'submitted'};
         dialogStates.set(surface.tabId,'result');model.advanceDocument(surface.tabId);
       }else throw Error('Unexpected dialog mode');
     }else throw Error('Unexpected injection function');
     if(options.resultFor)result=await options.resultFor(call,result,model);
-    const record={frameId:0,documentId:tabs.get(surface.tabId)?.documentId,result};
+    const record={frameId:0,documentId:executedDocumentId,result};
     if(options.recordFor)return options.recordFor(call,record,model);
     return [record];
   }}};
@@ -76,10 +91,10 @@ async function mockBrowser(options={}){
   const begin=async(profiles=[target])=>{assert.equal((await send(prep({profiles}))).ok,true);assert.equal((await command('START',{confirmed:true})).ok,true);};
   return {...model,send,command,begin,waits,addTab,setHook:fn=>hook=fn,setNow:n=>now=n,now:()=>now};
 }
-const mutations=b=>b.calls.filter(c=>c.func==='inspectNaverDialog'&&['next','select','submit'].includes(c.mode));
+const mutations=b=>b.calls.filter(c=>c.func==='inspectNaverDialog'&&['next','expand','select','submit'].includes(c.mode));
 const submissions=b=>b.calls.filter(c=>c.func==='inspectNaverDialog'&&c.mode==='submit');
 
-test('Naver worker binds admin-only jobs and performs one ordered ordinary-neighbor flow in the 광고 group',async()=>{
+test('Naver worker binds admin-only jobs and performs one ordered ordinary-neighbor flow in the 광고업체 group',async()=>{
   const b=await mockBrowser();assert.equal((await b.command('PING')).ok,true);
   const prepared=await b.send(prep());assert.equal(prepared.ok,true);assert.equal(b.calls.length,0);
   assert.deepEqual(Object.keys(prepared.job).sort(),['expectedAccount','expectedName','profiles','expiresAt','index','started','running','terminalError','results'].sort());
@@ -130,7 +145,7 @@ test('only one newly opened popup with the target ID and correct opener is eligi
   const b=await mockBrowser({noPopup:true});b.addTab({url:NAVER_ORIGIN+'/BuddyAdd.naver?blogId=wherechoice',openerTabId:4});await b.begin();assert.equal((await b.command('STEP',{index:0})).ok,false);assert.equal(mutations(b).length,0);
 });
 
-test('missing or ambiguous 광고 groups halt before group selection and final submit',async()=>{
+test('missing or ambiguous 광고업체 groups halt before group selection and final submit',async()=>{
   for(const code of ['group_missing','group_ambiguous','challenge','login_required','wrong_profile']){
     const b=await mockBrowser({resultFor:(c,r)=>c.func==='inspectNaverDialog'&&c.stage==='group'?{ok:false,code}:r});await b.begin();
     assert.equal((await b.command('STEP',{index:0})).code,code);assert.deepEqual(mutations(b).map(c=>c.mode),['next']);
@@ -150,8 +165,8 @@ test('document pinning prevents submitting a popup document changed during actor
 
 test('post-submit uncertainty is terminal and preserves earlier confirmed existing results',async()=>{
   const b=await mockBrowser({existing:[target],resultFor:(c,r)=>c.func==='inspectNaverDialog'&&c.stage==='result'?{ok:false,code:'uncertain'}:r});await b.begin([target,second]);
-  assert.equal((await b.command('STEP',{index:0})).job.results[0].state,'existing');assert.equal((await b.command('STEP',{index:1})).code,'uncertain');
-  const state=(await b.command('STATUS')).job;assert.equal(state.running,false);assert.equal(state.index,1);assert.equal(state.results.length,1);assert.equal(state.terminalError,'uncertain');
+  assert.equal((await b.command('STEP',{index:0})).job.results[0].state,'existing');assert.equal((await b.command('STEP',{index:1})).code,'result_unconfirmed');
+  const state=(await b.command('STATUS')).job;assert.equal(state.running,false);assert.equal(state.index,1);assert.equal(state.results.length,1);assert.equal(state.terminalError,'result_unconfirmed');
   assert.equal(submissions(b).length,1);assert.equal((await b.command('START',{confirmed:true})).code,'not_confirmed');assert.equal((await b.command('STEP',{index:1})).code,'not_confirmed');assert.equal(submissions(b).length,1);assert.equal(b.removed.length,0);
 });
 
@@ -176,4 +191,44 @@ test('expiry, explicit cancellation and admin departure prevent further actions'
   const cancel=await mockBrowser();await cancel.begin();cancel.setHook(async c=>{if(c.func==='inspectNaverPage'&&c.mode==='inspect')await cancel.command('CANCEL');});assert.equal((await cancel.command('STEP',{index:0})).code,'job_lost');assert.equal(mutations(cancel).length,0);
   const left=await mockBrowser();await left.begin();left.events.updated(1,{url:adminOrigin+'/admin/login'});assert.equal((await left.command('STATUS')).code,'job_lost');
   const closed=await mockBrowser();await closed.begin();closed.events.removed(1);assert.equal((await closed.command('STATUS')).code,'job_lost');
+});
+
+test('custom dropdown waits for observed expansion and selection without repeating any clicks',async()=>{
+  const b=await mockBrowser({custom:true,expandDelay:4,selectDelay:5});await b.begin();
+  const result=await b.command('STEP',{index:0});assert.equal(result.ok,true);assert.equal(result.job.results[0].state,'added');
+  assert.deepEqual(mutations(b).map(c=>c.mode),['next','expand','select','submit']);
+  assert.ok(mutations(b).every(c=>c.pinned));
+  const groupReads=b.calls.filter(c=>c.stage==='group'&&c.mode==='inspect');
+  assert.equal(groupReads.length,10);assert.ok(groupReads.slice(1).every(c=>c.pinned));assert.equal(submissions(b).length,1);
+});
+
+test('a custom dropdown that never settles stops without repeated clicks or final submit',async()=>{
+  for(const options of [{custom:true,expandDelay:100},{custom:true,selectDelay:100}]){
+    const b=await mockBrowser(options);await b.begin();assert.equal((await b.command('STEP',{index:0})).code,'group_unrecognized');
+    assert.deepEqual(mutations(b).map(c=>c.mode),options.expandDelay?['next','expand']:['next','expand','select']);
+    assert.equal(submissions(b).length,0);assert.equal((await b.command('STEP',{index:0})).code,'not_confirmed');
+  }
+});
+
+test('document replacement during dropdown waits cannot authorize selecting or submitting',async()=>{
+  for(const action of ['expand','select']){
+    const b=await mockBrowser({custom:true});await b.begin();let dispatched=false;
+    b.setHook((c,m)=>{
+      if(c.mode===action)dispatched=true;
+      else if(dispatched&&c.mode==='inspect'&&c.stage==='group')m.advanceDocument(c.tabId);
+    });
+    assert.equal((await b.command('STEP',{index:0})).ok,false);assert.equal(submissions(b).length,0);
+    assert.equal(mutations(b).filter(c=>c.mode===action).length,1);
+  }
+});
+
+test('popup and recognition failures name the failed stage without claiming approval pending',async()=>{
+  for(const [options,code]of [
+    [{noPopup:true},'popup_not_found'],[{popupCount:2},'popup_binding'],
+    [{resultFor:(c,r)=>c.stage==='choice'?{ok:false,code:'ambiguous_dialog'}:r},'choice_unrecognized'],
+    [{resultFor:(c,r)=>c.stage==='group'?{ok:false,code:'ambiguous_dialog'}:r},'group_unrecognized']
+  ]){
+    const b=await mockBrowser(options);await b.begin();assert.equal((await b.command('STEP',{index:0})).code,code);
+    const job=(await b.command('STATUS')).job;assert.equal(job.terminalError,code);assert.equal(job.results.length,0);assert.equal(submissions(b).length,0);
+  }
 });

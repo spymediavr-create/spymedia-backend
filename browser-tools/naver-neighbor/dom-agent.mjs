@@ -72,44 +72,59 @@ export function inspectNaverPage({expectedAccount,expectedName,targetUrl,mode='i
 
 // Runs only in the specific BuddyAdd popup opened from the reviewed profile.
 // The worker binds that popup by opener, initial blogId and ordered stages.
-export function inspectNaverDialog({targetUrl,targetName,stage,mode='inspect',groupName='광고'}){
+export function inspectNaverDialog({targetUrl,targetName,stage,mode='inspect',groupName='광고업체'}){
   const fail=code=>({ok:false,code});
   const text=node=>String(node?.innerText??node?.textContent??'').replace(/\s+/g,' ').trim();
-  const visible=node=>{
+  const visible=(node,headingOnly=false)=>{
     if(!node||!node.getClientRects().length)return false;
     for(let p=node;p&&p!==document;p=p.parentElement){
-      if(p.hidden||p.getAttribute('aria-hidden')==='true'||p.hasAttribute('inert'))return false;
+      // Naver's observed popup title is rendered but aria-hidden to avoid
+      // repeating its fieldset legend. This exception never permits actions.
+      const duplicatedTitle=headingOnly===true&&p===node&&p.matches('.popup_heading > h1.title[aria-hidden="true"]');
+      if(p.hidden||p.getAttribute('aria-hidden')==='true'&&!duplicatedTitle||p.hasAttribute('inert'))return false;
       const style=getComputedStyle(p);if(style.display==='none'||style.visibility==='hidden')return false;
     }return true;
   };
-  const enabled=node=>visible(node)&&!node.disabled&&node.getAttribute('aria-disabled')!=='true';
+  const enabled=node=>visible(node)&&!node.disabled&&!node.hasAttribute('disabled')&&node.getAttribute('aria-disabled')!=='true';
+  const visibleText=node=>{
+    const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT),parts=[];
+    for(let child=walker.nextNode();child;child=walker.nextNode())if(visible(child.parentElement))parts.push(child.textContent);
+    return parts.join('').replace(/\s+/g,' ').trim();
+  };
+  // Match a complete rendered statement and its exact name, not a suffix
+  // anywhere in body text. aria-hidden decoys do not establish a target.
+  const statements=pattern=>{
+    const matches=[document.body,...document.body.querySelectorAll('*')].filter(visible).map(node=>({node,match:visibleText(node).match(pattern)})).filter(item=>item.match);
+    return matches.filter(item=>!matches.some(other=>other!==item&&item.node.contains(other.node)));
+  };
   let target,current;try{target=new URL(targetUrl);current=new URL(location.href);}catch{return fail('wrong_profile');}
   if(target.origin!=='https://blog.naver.com'||target.username||target.password||target.search||target.hash||!/^\/[a-z0-9_-]{1,50}$/.test(target.pathname)||target.pathname==='/spymedia')return fail('wrong_profile');
   if(current.origin!==target.origin||current.username||current.password||current.hash||current.pathname!=='/BuddyAdd.naver')return fail('ambiguous_dialog');
   const ids=current.searchParams.getAll('blogId');
   if(ids.length>1||ids.length===1&&ids[0]!==target.pathname.slice(1)||stage==='choice'&&ids.length!==1)return fail('wrong_profile');
-  if(typeof targetName!=='string'||!targetName.trim()||targetName.length>200||targetName!==targetName.replace(/\s+/g,' ').trim()||groupName!=='광고')return fail('wrong_profile');
-  if(!['choice','group','result'].includes(stage)||!['inspect','next','select','submit'].includes(mode))return fail('invalid_message');
-  const body=text(document.body),headings=[...document.querySelectorAll('h1,h2,[role="heading"]')].filter(n=>visible(n)&&text(n)==='이웃추가');
+  if(typeof targetName!=='string'||!targetName.trim()||targetName.length>200||targetName!==targetName.replace(/\s+/g,' ').trim()||groupName!=='광고업체')return fail('wrong_profile');
+  if(!['choice','group','result'].includes(stage)||!['inspect','next','expand','select','submit'].includes(mode))return fail('invalid_message');
+  const body=text(document.body),headings=[...document.querySelectorAll('h1,h2,[role="heading"]')].filter(n=>visible(n,true)&&text(n)==='이웃추가');
   if([...document.querySelectorAll('input[type="password"],a[href*="nid.naver.com/nidlogin"]')].some(visible))return fail('login_required');
   if(/보안[ ]?(?:확인|인증)|본인[ ]?인증|자동[ ]?입력|이용[ ]?제한|잠시[ ]?후|하루.{0,20}(?:초과|제한)|captcha/i.test(body))return fail('challenge');
   if(headings.length!==1||[...document.querySelectorAll('textarea,iframe,[role="alertdialog"],[role="dialog"],[role="alert"]')].some(visible))return fail('ambiguous_dialog');
-  const compact=value=>value.replace(/\s+/g,'');
-  const has=phrase=>compact(body).includes(compact(phrase));
   const controls=[...document.querySelectorAll('button,a,input[type="button"],input[type="submit"],[role="button"]')].filter(visible);
   const label=node=>node.matches('input')?String(node.value||'').trim():text(node);
   const nexts=controls.filter(n=>label(n)==='다음');
   const next=nexts.length===1&&enabled(nexts[0])?nexts[0]:null;
   const radios=[...document.querySelectorAll('input[type="radio"]')].filter(visible);
   const selects=[...document.querySelectorAll('select')].filter(visible);
+  const dropdowns=[...document.querySelectorAll('.area_dropdown[data-set="popup_buddy_group"]')].filter(visible);
   if(stage==='result'){
-    if(mode!=='inspect'||radios.length||selects.length||nexts.length||compact(body).split('님의블로그를이웃으로추가하였습니다.').length!==2||!has(targetName+'님의 블로그를 이웃으로 추가하였습니다.'))return fail('uncertain');
+    const completed=statements(/^(.*?)님의\s*블로그를\s*이웃으로\s*추가하였습니다\.$/);
+    if(mode!=='inspect'||radios.length||selects.length||dropdowns.length||nexts.length||completed.length!==1||completed[0].match[1].trim()!==targetName)return fail('uncertain');
     const closes=controls.filter(n=>label(n)==='닫기');
     return closes.length===1&&enabled(closes[0])?{ok:true,state:'added'}:fail('uncertain');
   }
   if(!next)return fail('ambiguous_dialog');
   if(stage==='choice'){
-    if(selects.length||radios.length!==2||!has(targetName+'님을')||!has('서로이웃으로 추가합니다.'))return fail('ambiguous_dialog');
+    const choices=statements(/^(.*?)님을\s*이웃\s*서로이웃으로\s*추가합니다\.$/);
+    if(selects.length||dropdowns.length||radios.length!==2||choices.length!==1||choices[0].match[1].trim()!==targetName)return fail('ambiguous_dialog');
     const radioLabel=r=>{
       const labels=[...(r.labels||[])].filter(visible).map(text);
       if(labels.length===1)return labels[0];
@@ -123,13 +138,60 @@ export function inspectNaverDialog({targetUrl,targetName,stage,mode='inspect',gr
     if(!ordinary[0].checked||mutual[0].checked)return fail('mutual_only');
     next.click();return {ok:true,state:'advanced'};
   }
-  if(radios.length||selects.length!==1||!has(targetName+'님을 추가할 그룹을 선택해주세요.'))return fail('ambiguous_dialog');
+  const groups=statements(/^(.*?)님을\s*추가할\s*그룹을\s*선택해주세요\.$/);
+  if(radios.length||groups.length!==1||groups[0].match[1].trim()!==targetName)return fail('ambiguous_dialog');
+  if([...document.querySelectorAll('.group_name._newGroup')].some(visible))return fail('group_ambiguous');
+  if(dropdowns.length){
+    if(dropdowns.length!==1||selects.length)return fail('group_ambiguous');
+    const dropdown=dropdowns[0];
+    const statement=groups[0].node,buddyState=dropdown.closest('.buddy_state');
+    const targetNames=[...statement.querySelectorAll(':scope > strong.name_buddy')].filter(visible);
+    if(!statement.matches('p.text_buddy_add')||!visible(buddyState)||!buddyState.contains(statement)||targetNames.length!==1||visibleText(targetNames[0])!==targetName)return fail('wrong_profile');
+    const triggers=[...dropdown.querySelectorAll(':scope > a.present_selected._selectedGroup')].filter(visible);
+    const menus=[...dropdown.querySelectorAll(':scope > div.dropdown_select._groupList')];
+    if(triggers.length!==1||menus.length!==1)return fail('group_ambiguous');
+    const trigger=triggers[0],menu=menus[0];
+    const names=[...trigger.querySelectorAll(':scope > strong._selectedGroupName')].filter(visible);
+    if(!enabled(trigger)||trigger.getAttribute('href')!=='#'||trigger.getAttribute('role')!=='button'||trigger.getAttribute('aria-haspopup')!=='true'||names.length!==1||!text(names[0]))return fail('group_ambiguous');
+    const expandedAttribute=trigger.getAttribute('aria-expanded'),hiddenAttribute=menu.getAttribute('aria-hidden');
+    if(!['true','false'].includes(expandedAttribute)||!['true','false'].includes(hiddenAttribute))return fail('group_ambiguous');
+    const expanded=expandedAttribute==='true'&&hiddenAttribute==='false'&&visible(menu);
+    const collapsed=expandedAttribute==='false'&&hiddenAttribute==='true'&&!visible(menu);
+    const selected=collapsed&&text(names[0])===groupName;
+    let option;
+    if(expanded){
+      // Read labels only after the user-visible dropdown has opened. Hidden
+      // form fields and the page's groupId/groupName attributes are not used.
+      const options=[...menu.querySelectorAll('a.item._selectGroup')].filter(visible);
+      if(!options.length||options.some(n=>n.getAttribute('href')!=='#'||!['true','false'].includes(n.getAttribute('aria-selected'))))return fail('group_ambiguous');
+      const chosen=options.filter(n=>n.getAttribute('aria-selected')==='true');
+      if(chosen.length!==1||text(chosen[0])!==text(names[0]))return fail('group_ambiguous');
+      const matches=options.filter(n=>text(n)===groupName);
+      if(!matches.length)return fail('group_missing');
+      if(matches.length!==1||!enabled(matches[0]))return fail('group_ambiguous');
+      option=matches[0];
+    }
+    if(mode==='inspect')return {ok:true,state:'group',kind:'custom',expanded,selected};
+    if(mode==='expand'){
+      if(expanded)return {ok:true,state:'expanded'};
+      if(!collapsed)return fail('group_ambiguous');
+      trigger.click();return {ok:true,state:'expanded'};
+    }
+    if(mode==='select'){
+      if(!expanded||!option)return fail('group_ambiguous');
+      option.click();return {ok:true,state:'selected'};
+    }
+    if(mode!=='submit')return fail('invalid_message');
+    if(!selected)return fail('group_ambiguous');
+    next.click();return {ok:true,state:'submitted'};
+  }
+  if(selects.length!==1)return fail('ambiguous_dialog');
   const select=selects[0];if(!enabled(select)||select.multiple)return fail('group_ambiguous');
   const matches=[...select.options].filter(o=>text(o)===groupName);
   if(!matches.length)return fail('group_missing');
   if(matches.length!==1||matches[0].disabled||matches[0].parentElement?.disabled)return fail('group_ambiguous');
   const option=matches[0];
-  if(mode==='inspect')return {ok:true,state:'group'};
+  if(mode==='inspect')return {ok:true,state:'group',kind:'native',selected:select.selectedOptions.length===1&&select.selectedOptions[0]===option};
   if(mode==='select'){
     select.selectedIndex=option.index;select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('change',{bubbles:true}));
     return select.selectedOptions.length===1&&select.selectedOptions[0]===option?{ok:true,state:'selected'}:fail('group_ambiguous');

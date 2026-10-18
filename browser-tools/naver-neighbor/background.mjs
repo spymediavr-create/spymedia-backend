@@ -37,7 +37,7 @@ async function execute(job,tabId,func,args,documentId){
   if(!onNaver(tab.url))throw fault(tab.url?.startsWith('https://nid.naver.com/')?'login_required':'browser_error');
   const records=await chrome.scripting.executeScript({target:documentId?{tabId,documentIds:[documentId]}:{tabId,frameIds:[0]},func,args:[args]});
   assertActive(job);
-  if(records.length!==1||records[0].frameId!==0||!records[0].result||typeof records[0].result.ok!=='boolean')throw fault('browser_error');
+  if(records.length!==1||records[0].frameId!==0||documentId&&records[0].documentId!==documentId||!records[0].result||typeof records[0].result.ok!=='boolean')throw fault('browser_error');
   return records[0];
 }
 async function contentPage(job,key,targetUrl){
@@ -79,24 +79,25 @@ async function openPopup(job,targetUrl,actorLabel,targetName){
       const tab=await chrome.tabs.get(id).catch(()=>null);
       if(!tab||tab.openerTabId!==job.naverTabId)continue;
       if(popupMatches(tab.url,targetUrl,true))found.push(tab);
-      else if(tab.status==='complete'&&tab.url&&tab.url!=='about:blank')throw fault('ambiguous_dialog');
+      else if(tab.status==='complete'&&tab.url&&tab.url!=='about:blank')throw fault('popup_binding');
     }
-    if(found.length>1)throw fault('ambiguous_dialog');
+    if(found.length>1)throw fault('popup_binding');
     if(found.length===1&&found[0].status==='complete'){
       const tab=found[0];job.popupTabIds.add(tab.id);job.activePopupId=tab.id;job.pendingPopupTarget=null;return tab.id;
     }await delay(250);
-  }throw fault('ambiguous_dialog');
+  }throw fault('popup_not_found');
 }
 async function popupRecord(job,popupId,targetUrl,targetName,stage,mode,documentId){
   await assertAdmin(job);const tab=await chrome.tabs.get(popupId);
-  if(!job.popupTabIds.has(popupId)||job.activePopupId!==popupId||tab.openerTabId!==job.naverTabId||!popupMatches(tab.url,targetUrl,stage==='choice'))throw fault('ambiguous_dialog');
-  return execute(job,popupId,inspectNaverDialog,{targetUrl,targetName,stage,mode,groupName:'광고'},documentId);
+  if(!job.popupTabIds.has(popupId)||job.activePopupId!==popupId||tab.openerTabId!==job.naverTabId||!popupMatches(tab.url,targetUrl,stage==='choice'))throw fault('popup_binding');
+  return execute(job,popupId,inspectNaverDialog,{targetUrl,targetName,stage,mode,groupName:'광고업체'},documentId);
 }
-async function waitPopup(job,popupId,targetUrl,targetName,stage){
+async function waitPopup(job,popupId,targetUrl,targetName,stage,{documentId,ready=()=>true}={}){
   const deadline=Date.now()+10000;
   for(let n=0;n<21;n++){
-    const r=await popupRecord(job,popupId,targetUrl,targetName,stage,'inspect');
-    if(r.result.ok||!['ambiguous_dialog','uncertain'].includes(r.result.code)||Date.now()>=deadline)return r;
+    const r=await popupRecord(job,popupId,targetUrl,targetName,stage,'inspect',documentId);
+    if(r.result.ok&&ready(r.result)||!r.result.ok&&!['ambiguous_dialog','uncertain'].includes(r.result.code))return r;
+    if(Date.now()>=deadline)throw fault('uncertain');
     await delay(500);
   }throw fault('uncertain');
 }
@@ -112,7 +113,7 @@ function start(job,confirmed){
 }
 async function step(job,index){
   if(!job.running||job.busy||index!==job.index||index>=job.profiles.length)return rejected('not_confirmed');
-  job.busy=true;const targetUrl=job.profiles[index];
+  job.busy=true;const targetUrl=job.profiles[index];let popupStage='';
   try{
     const actorLabel=await verifyActor(job);
     const tabId=await contentPage(job,'naverTabId',targetUrl);
@@ -124,17 +125,30 @@ async function step(job,index){
       if(typeof before.targetName!=='string'||!before.targetName.trim()||before.targetName.length>200)throw fault('ambiguous_profile');
       const targetName=before.targetName,popupId=await openPopup(job,targetUrl,actorLabel,targetName);
       if(popupId!==null){
+        popupStage='choice';
         const choice=await waitPopup(job,popupId,targetUrl,targetName,'choice');
         if(!choice.result.ok)throw fault(choice.result.code);
         if(choice.result.state!=='choice')throw fault('ambiguous_dialog');
         await clickStage(job,popupId,targetUrl,targetName,'choice','next',choice,'advanced');
-        const group=await waitPopup(job,popupId,targetUrl,targetName,'group');
+        popupStage='group';
+        let group=await waitPopup(job,popupId,targetUrl,targetName,'group');
         if(!group.result.ok)throw fault(group.result.code);
         if(group.result.state!=='group')throw fault('ambiguous_dialog');
-        const selected=await clickStage(job,popupId,targetUrl,targetName,'group','select',group,'selected');
+        if(!['native','custom'].includes(group.result.kind))throw fault('ambiguous_dialog');
+        if(group.result.kind==='custom'){
+          if(!group.result.expanded)await clickStage(job,popupId,targetUrl,targetName,'group','expand',group,'expanded');
+          group=await waitPopup(job,popupId,targetUrl,targetName,'group',{documentId:group.documentId,ready:r=>r.state==='group'&&r.kind==='custom'&&r.expanded===true});
+          if(!group.result.ok)throw fault(group.result.code);
+        }
+        await clickStage(job,popupId,targetUrl,targetName,'group','select',group,'selected');
+        // UI effects may settle asynchronously. Poll only observations, never
+        // repeat a click, and stay on the same document that received it.
+        const selected=await waitPopup(job,popupId,targetUrl,targetName,'group',{documentId:group.documentId,ready:r=>r.state==='group'&&r.kind===group.result.kind&&r.selected===true});
+        if(!selected.result.ok)throw fault(selected.result.code);
         // Recheck current ownership immediately before the single final submit.
         if(await verifyActor(job)!==actorLabel)throw fault('account_mismatch');
         await clickStage(job,popupId,targetUrl,targetName,'group','submit',selected,'submitted');
+        popupStage='result';
         const result=await waitPopup(job,popupId,targetUrl,targetName,'result');
         if(!result.result.ok||result.result.state!=='added')throw fault(result.result.code||'uncertain');
         state='added';job.activePopupId=null;job.popupTabIds.delete(popupId);
@@ -143,7 +157,12 @@ async function step(job,index){
     }
     assertActive(job);job.results.push({index:job.index,state});job.index++;if(job.index===job.profiles.length)job.running=false;
     return {ok:true};
-  }catch(error){job.running=false;job.terminalError=error.code||'browser_error';return rejected(job.terminalError);}
+  }catch(error){
+    job.running=false;
+    const stageCode={choice:'choice_unrecognized',group:'group_unrecognized',result:'result_unconfirmed'}[popupStage];
+    job.terminalError=stageCode&&['ambiguous_dialog','uncertain'].includes(error.code)?stageCode:error.code||'browser_error';
+    return rejected(job.terminalError);
+  }
   finally{job.busy=false;job.pendingPopupTarget=null;job.popupCandidates?.clear();}
 }
 async function handle(message,sender){
