@@ -123,19 +123,32 @@ export function inspectNaverDialog({targetUrl,targetName,stage,mode='inspect',gr
   }
   if(!next)return fail('ambiguous_dialog');
   if(stage==='choice'){
-    const choices=statements(/^(.*?)님을\s*이웃\s*서로이웃으로\s*추가합니다\.$/);
-    if(selects.length||dropdowns.length||radios.length!==2||choices.length!==1||choices[0].match[1].trim()!==targetName)return fail('ambiguous_dialog');
-    const radioLabel=r=>{
-      const labels=[...(r.labels||[])].filter(visible).map(text);
-      if(labels.length===1)return labels[0];
-      return String(r.getAttribute('aria-label')||'').trim();
+    const readChoice=()=>{
+      // Naver renders clipped native radios through visible labels. Source
+      // indentation also separates the mutual label from the suffix span.
+      const choices=statements(/^(.*?)님을\s*이웃\s*서로이웃\s*으로\s*(추가|신청)합니다\.$/);
+      const currentRadios=[...document.querySelectorAll('input[type="radio"]')].filter(visible);
+      if(choices.length!==1||choices[0].match[1].trim()!==targetName||currentRadios.length!==2)return null;
+      const statement=choices[0].node;
+      const pairs=currentRadios.map(r=>({radio:r,labels:[...(r.labels||[])].filter(visible)}));
+      if(pairs.some(p=>p.labels.length!==1||!statement.contains(p.radio)||!statement.contains(p.labels[0])))return null;
+      const ordinary=pairs.filter(p=>text(p.labels[0])==='이웃'),mutual=pairs.filter(p=>text(p.labels[0])==='서로이웃');
+      if(ordinary.length!==1||mutual.length!==1||!enabled(ordinary[0].radio)||ordinary[0].radio.classList.contains('disabled')||!enabled(ordinary[0].labels[0]))return null;
+      if(statement.matches('p.text_buddy_add')){
+        const names=[...statement.querySelectorAll(':scope > strong.name_buddy')].filter(visible);
+        if(names.length!==1||visibleText(names[0])!==targetName)return null;
+      }
+      return {ordinary:ordinary[0].radio,mutual:mutual[0].radio,label:ordinary[0].labels[0],action:choices[0].match[2]};
     };
-    const ordinary=radios.filter(r=>radioLabel(r)==='이웃'),mutual=radios.filter(r=>radioLabel(r)==='서로이웃');
-    if(ordinary.length!==1||mutual.length!==1||!enabled(ordinary[0]))return fail('mutual_only');
+    if(selects.length||dropdowns.length||radios.length!==2)return fail('ambiguous_dialog');
+    const choice=readChoice();if(!choice)return fail('ambiguous_dialog');
     if(mode==='inspect')return {ok:true,state:'choice'};
     if(mode!=='next')return fail('invalid_message');
-    if(!ordinary[0].checked)ordinary[0].click();
-    if(!ordinary[0].checked||mutual[0].checked)return fail('mutual_only');
+    if(!choice.ordinary.checked)choice.label.click();
+    const checked=readChoice();
+    if(!checked||checked.ordinary!==choice.ordinary||checked.mutual!==choice.mutual||!checked.ordinary.checked||checked.mutual.checked||checked.action!=='추가')return fail('mutual_only');
+    const currentNexts=[...document.querySelectorAll('button,a,input[type="button"],input[type="submit"],[role="button"]')].filter(n=>visible(n)&&label(n)==='다음');
+    if(currentNexts.length!==1||currentNexts[0]!==next||!enabled(next))return fail('ambiguous_dialog');
     next.click();return {ok:true,state:'advanced'};
   }
   const groups=statements(/^(.*?)님을\s*추가할\s*그룹을\s*선택해주세요\.$/);

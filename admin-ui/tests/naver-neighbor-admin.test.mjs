@@ -25,7 +25,7 @@ test('Naver popup errors identify the failed stage and never interpret automatio
   assert.match(errorMessage('group_unrecognized'),/광고업체 그룹 선택 단계/);
   assert.match(errorMessage('result_unconfirmed'),/전송 후 완료 화면/);
   for(const code of ['choice_unrecognized','group_unrecognized','result_unconfirmed'])assert.match(errorMessage(code),/상대방의 승인 대기가 아닙니다/);
-  assert.match(errorMessage('extension_update'),/0\.1\.1 이상/);
+  assert.match(errorMessage('extension_update'),/0\.1\.2 이상/);
 });
 
 test('Naver selection maps only explicit blog/post URLs to canonical blogs, deduplicates, and reports derived reasons',()=>{
@@ -50,7 +50,7 @@ test('Naver canonical profile deduplication allows distinct-blog counting while 
 });
 
 test('Naver job validation requires the exact actor, reviewed blogs, selection TTL, and confirmed PREPARE/START state',()=>{
-  assert.equal(ACTOR,'spymedia');assert.equal(VERSION,'0.1.1');const first=prepared();assert.equal(valid(first,selected,'PREPARE'),true);
+  assert.equal(ACTOR,'spymedia');assert.equal(VERSION,'0.1.2');const first=prepared();assert.equal(valid(first,selected,'PREPARE'),true);
   assert.equal(valid({...first,started:true,running:true},selected,'START'),true);
   for(const patch of [{expectedAccount:'other'},{expectedName:'스파이미디어'},{profiles:[selected.profiles[1],selected.profiles[0]]},{profiles:['https://blog.naver.com/other']},{expiresAt:123457},{started:1},{running:'true'},{index:-1},{index:3},{terminalError:'uncertain'},{capability:'never expose'}])assert.equal(valid({...first,...patch},selected,'PREPARE'),false);
   assert.equal(valid({...first,results:{}},selected,'PREPARE'),false);assert.equal(valid(null,selected,'PREPARE'),false);

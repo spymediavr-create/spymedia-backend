@@ -9,11 +9,12 @@ const origin='https://blog.naver.com',targetId='wherechoice',targetUrl=origin+'/
 const firstUrl=origin+'/BuddyAdd.naver?blogId='+targetId+'&trackingCode=fixture';
 const laterUrl=origin+'/BuddyAdd.naver';
 const capturedGroupHtml=await readFile(new URL('../tests/fixtures/naver-neighbor/group-popup.html',import.meta.url),'utf8');
+const capturedChoiceHtml=await readFile(new URL('../tests/fixtures/naver-neighbor/choice-popup.html',import.meta.url),'utf8');
 const capturedName='테스트블로그';
 let allowedUrl='',html='',cases=0,blockedRequests=0;
 
 // Native-control fixtures retain screenshot-derived choice/result coverage.
-// The separate custom-group fixture is sanitized from user-provided HTML.
+// Separate first-choice and custom-group fixtures use sanitized user HTML.
 // Both run offline with synthetic event handlers: no form POST or real add.
 function fixture({stage='choice',name=targetName,heading='이웃추가',ordinary=true,mutual=false,
   hiddenOrdinary=false,disabledOrdinary=false,extraRadio=false,duplicateNext=false,
@@ -78,6 +79,89 @@ try{
   // The final submission revalidates the selected group and target name.
   await load({stage:'group'});assert.equal((await inspect('group','select')).state,'selected');await page.locator('select').selectOption({label:'새그룹'});await page.locator('select').evaluate(n=>{delete n.dataset.changes;});assert.equal((await inspect('group','submit')).ok,false);await unchanged();cases++;
   await load({stage:'group',selected:'광고업체'});assert.equal((await inspect('group')).state,'group');await page.locator('.target').evaluate(n=>{n.textContent='바뀐블로그';});assert.equal((await inspect('group','submit')).ok,false);await unchanged();cases++;
+
+  const loadCapturedChoice=async({relation='ordinary',ignoreSelection=false,changeTarget=false,replaceNext=false,disableNext=false}={})=>{
+    html=capturedChoiceHtml;allowedUrl=firstUrl;await page.goto(allowedUrl);
+    await page.evaluate(({relation,ignoreSelection,changeTarget,replaceNext,disableNext})=>{
+      const ordinary=document.querySelector('#buddy_add'),mutual=document.querySelector('#each_buddy_add');
+      const count=node=>node.dataset.clicks=String(Number(node.dataset.clicks||0)+1);
+      const updatePresentation=()=>{
+        ordinary.parentElement.classList.toggle('checked',ordinary.checked);
+        mutual.parentElement.classList.toggle('checked',mutual.checked);
+      };
+      ordinary.checked=relation==='ordinary';mutual.checked=relation==='mutual';updatePresentation();
+      for(const radio of [ordinary,mutual]){
+        radio.addEventListener('click',()=>count(radio));
+        radio.addEventListener('change',()=>{
+          if(ignoreSelection){mutual.checked=true;ordinary.checked=false;}
+          if(changeTarget)document.querySelector('.name_buddy').textContent='바뀐블로그';
+          if(replaceNext){const next=document.querySelector('._buddyAddNext');next.replaceWith(next.cloneNode(true));}
+          if(disableNext)document.querySelector('._buddyAddNext').setAttribute('aria-disabled','true');
+          updatePresentation();
+        });
+      }
+      for(const label of document.querySelectorAll('label[for]'))label.addEventListener('click',()=>count(label));
+      for(const control of document.querySelectorAll('._buddyAddNext,.button_cancel'))control.addEventListener('click',event=>{event.preventDefault();count(control);});
+      document.querySelector('form').addEventListener('submit',event=>{event.preventDefault();document.body.dataset.forbiddenSubmit='true';});
+    },{relation,ignoreSelection,changeTarget,replaceNext,disableNext});
+  };
+  const capturedChoiceInspect=(mode='inspect',extra={})=>inspect('choice',mode,{targetName:capturedName,...extra});
+  const noChoiceSubmission=async()=>{
+    assert.equal(await page.locator('._buddyAddNext[data-clicks],.button_cancel[data-clicks],[data-forbidden-submit]').count(),0);
+  };
+
+  // Exact supplied first-step markup contains a newline between the mutual
+  // radio's label and the separate suffix span. The 0.1.1 text-node matcher
+  // failed this real shape even though rendered text looked unbroken.
+  await loadCapturedChoice();
+  assert.equal(await page.locator('script,link,input[type="hidden"]').count(),0);
+  assert.equal(await page.locator('.text_addbuddy').isVisible(),true);
+  assert.equal(await page.locator('.text_bothbuddy').isVisible(),false);
+  assert.deepEqual(await page.locator('#buddy_add').evaluate(node=>({width:node.getBoundingClientRect().width,height:node.getBoundingClientRect().height,clip:getComputedStyle(node).clip})),{width:1,height:1,clip:'rect(0px, 0px, 0px, 0px)'});
+  assert.equal((await capturedChoiceInspect()).state,'choice');await unchanged();
+  assert.equal((await capturedChoiceInspect('next')).state,'advanced');
+  assert.equal(await page.locator('._buddyAddNext[data-clicks="1"]').count(),1);
+  assert.equal(await page.locator('#buddy_add').isChecked(),true);assert.equal(await page.locator('#each_buddy_add').isChecked(),false);cases++;
+  await loadCapturedChoice();await page.locator('.name_buddy').evaluate(node=>node.textContent='테스트 블로그');
+  assert.equal((await capturedChoiceInspect('next',{targetName:'테스트 블로그'})).state,'advanced');
+  assert.equal(await page.locator('._buddyAddNext[data-clicks="1"]').count(),1);cases++;
+
+  // The alternate visible suffix describes a request. It must first switch
+  // to ordinary neighbor and confirm that switch, never submit mutual mode.
+  for(const relation of ['mutual']){
+    await loadCapturedChoice({relation});assert.equal((await capturedChoiceInspect()).state,'choice');await unchanged();
+    assert.equal((await capturedChoiceInspect('next')).state,'advanced');
+    assert.equal(await page.locator('#buddy_add').isChecked(),true);assert.equal(await page.locator('#each_buddy_add').isChecked(),false);
+    assert.equal(await page.locator('.text_addbuddy').isVisible(),true);assert.equal(await page.locator('.text_bothbuddy').isVisible(),false);
+    assert.equal(await page.locator('label[for="buddy_add"][data-clicks="1"]').count(),1,'Click the rendered ordinary label, not the clipped input');
+    assert.equal(await page.locator('._buddyAddNext[data-clicks="1"]').count(),1);cases++;
+  }
+  const refuseCapturedChoice=async(mutator,options={})=>{
+    await loadCapturedChoice(options);await page.evaluate(mutator);
+    assert.equal((await capturedChoiceInspect('next')).ok,false,String(mutator));await unchanged();await noChoiceSubmission();cases++;
+  };
+  for(const mutate of [
+    ()=>document.querySelector('.name_buddy').textContent='다른테스트블로그',
+    ()=>document.querySelector('.name_buddy').setAttribute('aria-hidden','true'),
+    ()=>{document.querySelector('.name_buddy').textContent='다른블로그';document.querySelector('.text_bothbuddy').textContent='테스트블로그님을 이웃 서로이웃으로 추가합니다.';},
+    ()=>document.querySelector('.text_bothbuddy').style.display='inline',
+    ()=>document.querySelector('.text_addbuddy').style.display='none',
+    ()=>document.querySelector('#buddy_add').disabled=true,
+    ()=>document.querySelector('#buddy_add').classList.add('disabled'),
+    ()=>document.querySelector('#buddy_add').style.display='none',
+    ()=>document.querySelector('label[for="buddy_add"]').hidden=true,
+    ()=>document.querySelector('label[for="buddy_add"]').parentElement.append(document.querySelector('label[for="buddy_add"]').cloneNode(true)),
+    ()=>document.querySelector('label[for="buddy_add"]').textContent='서로이웃',
+    ()=>document.querySelector('label[for="each_buddy_add"]').textContent='이웃',
+    ()=>document.querySelector('.radio_addbuddy').append(document.querySelector('#buddy_add').cloneNode(true)),
+    ()=>document.querySelector('.text_buddy_add').parentElement.append(document.querySelector('.text_buddy_add').cloneNode(true)),
+    ()=>document.querySelector('._buddyAddNext').parentElement.append(document.querySelector('._buddyAddNext').cloneNode(true)),
+    ()=>document.querySelector('._buddyAddNext').setAttribute('aria-disabled','true')
+  ])await refuseCapturedChoice(mutate);
+  await loadCapturedChoice({relation:'none'});assert.equal((await capturedChoiceInspect('next')).ok,false);await unchanged();await noChoiceSubmission();cases++;
+  for(const options of [{relation:'mutual',ignoreSelection:true},{relation:'mutual',changeTarget:true},{relation:'mutual',replaceNext:true},{relation:'mutual',disableNext:true}]){
+    await loadCapturedChoice(options);assert.equal((await capturedChoiceInspect('next')).ok,false);await noChoiceSubmission();cases++;
+  }
 
   const loadCaptured=async(options={},url=laterUrl)=>{
     html=capturedGroupHtml;allowedUrl=new URL(url).href;await page.goto(allowedUrl);
@@ -234,5 +318,5 @@ try{
   assert.equal((await capturedInspect()).selected,true);assert.equal((await capturedInspect('submit')).state,'submitted');
   assert.equal(await page.locator('._selectGroup[data-clicks="1"]').count(),1);cases++;
 
-  console.log(`PASS ${cases} offline Chromium Naver popup fixtures: screenshot-derived native choice/result, user-HTML custom group dropdown, visible aria-hidden heading exception, exact existing 광고업체 selection, hidden state ignored, one final submit, explicit success, and refusal on target/group/heading/control ambiguity. Blocked non-fixture requests: ${blockedRequests}. Live Naver requests, form submissions and neighbor additions: 0.`);
+  console.log(`PASS ${cases} offline Chromium Naver popup fixtures: user-HTML choice/clipped-radio labels and custom group dropdown, screenshot-derived native/result controls, visible aria-hidden heading exception, exact existing 광고업체 selection, hidden state ignored, one final submit, explicit success, and refusal on target/group/heading/control ambiguity. Blocked non-fixture requests: ${blockedRequests}. Live Naver requests, form submissions and neighbor additions: 0.`);
 }finally{await browser.close();}

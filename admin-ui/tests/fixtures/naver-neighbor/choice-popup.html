@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>네이버 :: 이웃추가</title>
+  <!-- Sanitized from the user-provided first BuddyAdd popup, preserving control
+       structure and whitespace. Identity, hidden values, remote assets,
+       javascript URLs, original scripts and submit action are removed. -->
+  <style>
+    body { font: 16px sans-serif; padding: 24px; }
+    .popup_buddy { width: 430px; }
+    .popup_heading { margin-bottom: 24px; }
+    .buddy_state { border: 1px solid #ddd; padding: 20px; }
+    /* Relevant presentation rules confirmed in the referenced Naver CSS. */
+    .wrap_radio { display: inline-block; }
+    legend, .radio_button_buddy {
+      position: absolute; clip: rect(0 0 0 0); width: 1px; height: 1px;
+      margin: -1px; overflow: hidden;
+    }
+    .wrap_radio label { display: inline-block; color: #000; cursor: pointer; }
+    .wrap_radio label::before {
+      content: ""; display: inline-block; box-sizing: border-box;
+      width: 16px; height: 16px; margin-right: 5px; border: 1px solid #e5e5e5;
+      background-color: #fff; border-radius: 50%; vertical-align: top;
+    }
+    .wrap_radio.checked label::before,
+    .radio_button_buddy:checked + label::before { border: 5px solid #00c73c; }
+    .text_addbuddy, .text_bothbuddy { display: none; }
+    .radio_addbuddy.checked ~ .text_addbuddy,
+    .radio_bothbuddy.checked ~ .text_bothbuddy { display: inline; }
+    .area_button { margin-top: 28px; }
+    .area_button a { display: inline-block; padding: 10px; }
+  </style>
+</head>
+<body>
+<div class="area_layer_popup" id="content">
+  <div class="popup_buddy">
+    <form name="buddyFrm">
+      <fieldset>
+        <legend>이웃추가</legend>
+        <div class="popup_heading">
+          <h1 class="title" aria-hidden="true">
+            이웃추가
+          </h1>
+        </div>
+        <div class="popup_text">
+          <div class="buddy_state">
+            <p class="text_buddy_add">
+              <strong class="name_buddy">테스트블로그</strong>님을
+              <span class="wrap_radio radio_addbuddy checked">
+                <input type="radio" class="radio_button_buddy" id="buddy_add" name="relation" value="0" checked><label for="buddy_add">이웃</label>
+              </span>
+              <span class="wrap_radio radio_bothbuddy">
+                <input type="radio" class="radio_button_buddy" id="each_buddy_add" name="relation" value="1"><label for="each_buddy_add">서로이웃</label>
+              </span><span class="text_addbuddy">으로 추가합니다.</span><span class="text_bothbuddy">으로 신청합니다.</span>
+            </p>
+          </div>
+          <div class="tip_box">
+            <ul class="list">
+              <li class="item">이웃과 서로이웃은 무엇인가요?</li>
+              <li class="item">이웃공개, 서로이웃공개 글은 누가 볼 수 있게 되나요?</li>
+            </ul>
+            <p>블로그 이용 TIP 더보기</p>
+          </div>
+        </div>
+        <div class="area_button">
+          <a href="#" class="button_cancel" role="button">취소</a>
+          <a href="#" class="button_next _buddyAddNext" role="button">다음</a>
+        </div>
+      </fieldset>
+    </form>
+  </div>
+</div>
+</body>
+</html>

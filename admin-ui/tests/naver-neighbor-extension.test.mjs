@@ -88,7 +88,7 @@ test('Naver bridge cancels only prepared jobs on departure and reports worker lo
 
 test('Naver extension permissions are limited to the blog and administrator, without login/session/storage grants',async()=>{
   const manifest=JSON.parse(await fs.readFile(new URL('../../browser-tools/naver-neighbor/manifest.json',import.meta.url),'utf8'));
-  assert.equal(VERSION,'0.1.1');assert.equal(manifest.version,VERSION);assert.equal(manifest.manifest_version,3);assert.deepEqual(manifest.permissions,['scripting']);assert.deepEqual(manifest.host_permissions,[NAVER_ORIGIN+'/*',origin+'/*']);
+  assert.equal(VERSION,'0.1.2');assert.equal(manifest.version,VERSION);assert.equal(manifest.manifest_version,3);assert.deepEqual(manifest.permissions,['scripting']);assert.deepEqual(manifest.host_permissions,[NAVER_ORIGIN+'/*',origin+'/*']);
   assert.equal(manifest.background.type,'module');assert.deepEqual(manifest.content_scripts[0].matches,[origin+'/admin*']);assert.equal(manifest.content_scripts[0].all_frames,false);assert.equal(manifest.content_scripts[0].run_at,'document_idle');assert.equal('optional_permissions' in manifest,false);
   assert.doesNotMatch(JSON.stringify(manifest),/nid\.naver|cookies|storage|webRequest|debugger|<all_urls>/);
 });

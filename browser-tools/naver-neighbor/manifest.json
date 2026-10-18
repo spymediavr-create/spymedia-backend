@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SpyMedia 네이버 선택 이웃추가",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "SNS 관리자에서 선택하고 확인한 블로그를 spymedia 블로그의 일반 이웃으로 추가하고 결과를 표시합니다.",
   "permissions": ["scripting"],
   "host_permissions": ["https://blog.naver.com/*", "https://spymedia-backend.onrender.com/*"],

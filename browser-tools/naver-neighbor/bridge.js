@@ -4,7 +4,7 @@
   const source='spymedia-admin-naver-neighbor';
   if(location.origin!==origin||location.pathname!=='/admin'||window.top!==window)return;
   const pending=new Set();
-  const reply=(type,requestId,action,detail={})=>window.postMessage({source:'spymedia-naver-neighbor-extension',type,requestId,action,...detail,version:'0.1.1'},origin);
+  const reply=(type,requestId,action,detail={})=>window.postMessage({source:'spymedia-naver-neighbor-extension',type,requestId,action,...detail,version:'0.1.2'},origin);
   const commandKeys={PING:[],CANCEL:[],STATUS:[],START:['confirmed'],STEP:['index'],PREPARE:['platform','expectedAccount','profiles','expiresAt','control']};
   window.addEventListener('message',async event=>{
     if(event.source!==window||event.origin!==origin||location.pathname!=='/admin')return;

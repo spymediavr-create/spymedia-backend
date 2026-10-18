@@ -90,6 +90,6 @@ test('Naver ZIP contains only the six installable extension files and each paylo
   assert.deepEqual([...entries.keys()].sort(),files.slice().sort());
   for(const name of files)assert.deepEqual(entries.get(name),await fs.readFile(new URL('../../browser-tools/naver-neighbor/'+name,import.meta.url)),'Packaged source must be current: '+name);
   const manifest=JSON.parse(entries.get('manifest.json').toString('utf8'));
-  assert.equal(manifest.manifest_version,3);assert.equal(manifest.version,'0.1.1');assert.equal(manifest.background.service_worker,'background.mjs');
+  assert.equal(manifest.manifest_version,3);assert.equal(manifest.version,'0.1.2');assert.equal(manifest.background.service_worker,'background.mjs');
   assert.deepEqual(manifest.permissions,['scripting']);assert.deepEqual(manifest.host_permissions,['https://blog.naver.com/*','https://spymedia-backend.onrender.com/*']);
 });

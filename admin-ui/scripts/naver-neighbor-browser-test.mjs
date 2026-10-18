@@ -47,8 +47,8 @@ try{
     const jobs=new Map();
     window.addEventListener('message',event=>{
       const message=event.data;if(message?.source!=='spymedia-admin-naver-neighbor')return;window.__neighborMessages.push(message);
-      const reply=(type,detail={})=>window.postMessage({source:'spymedia-naver-neighbor-extension',type,action:message.type,requestId:message.requestId,version:'0.1.1',...detail},location.origin);
-      if(message.type==='PING'){reply('READY',{version:window.__neighborMode==='old'?'0.1.0':'0.1.1'});return;}
+      const reply=(type,detail={})=>window.postMessage({source:'spymedia-naver-neighbor-extension',type,action:message.type,requestId:message.requestId,version:'0.1.2',...detail},location.origin);
+      if(message.type==='PING'){reply('READY',{version:window.__neighborMode==='old'?'0.1.1':'0.1.2'});return;}
       if(message.type==='CANCEL'){jobs.delete(message.requestId);return;}
       if(message.type==='PREPARE'){
         if(message.control!=='admin'||message.platform!=='blog')throw Error('Invalid Naver control protocol');
@@ -88,7 +88,7 @@ try{
   const finished=()=>page.waitForFunction(()=>document.getElementById('temporary-search-naver-neighbor-feedback').textContent.includes('처리가 끝났습니다'));
   const begin=async(mode='normal',all=false)=>{await page.evaluate(mode=>{window.__neighborMode=mode;window.__releaseNeighborStep=null;},mode);await search();if(all)await page.locator('#temporary-search-all').check();else await page.locator('[data-search-select]').first().check();await button.click();await page.locator('#temporary-search-naver-neighbor-start').click();};
   await idle();assert.equal(await card.isVisible(),false);assert.equal(searchCalls,0);
-  await search();assert.equal(await card.isVisible(),true);assert.match(await card.textContent(),/기존 광고업체 그룹/);assert.match(await card.textContent(),/상대방의 승인이 필요하지 않습니다/);assert.match(await card.textContent(),/두 버전을 함께 설치하지 마세요/);assert.equal(await card.getByRole('link',{name:'네이버 이웃추가 도구 0.1.1 받기'}).getAttribute('href'),'/api/admin/tools/naver-neighbor.zip');assert.equal(await page.locator('#temporary-search-facebook-follow').isVisible(),false);assert.equal(await button.isDisabled(),true);
+  await search();assert.equal(await card.isVisible(),true);assert.match(await card.textContent(),/기존 광고업체 그룹/);assert.match(await card.textContent(),/상대방의 승인이 필요하지 않습니다/);assert.match(await card.textContent(),/두 버전을 함께 설치하지 마세요/);assert.equal(await card.getByRole('link',{name:'네이버 이웃추가 도구 0.1.2 받기'}).getAttribute('href'),'/api/admin/tools/naver-neighbor.zip');assert.equal(await page.locator('#temporary-search-facebook-follow').isVisible(),false);assert.equal(await button.isDisabled(),true);
   await page.locator('#temporary-search-all').check();await button.click();assert.equal(await review.locator('li').count(),10);assert.match(await review.textContent(),/spymedia · 일반 이웃추가/);assert.equal(await page.evaluate(()=>window.__neighborMessages.length),0);
   const initialStatusChecks=statusChecks;await page.locator('#temporary-search-naver-neighbor-start').click();await finished();assert.equal(statusChecks,initialStatusChecks+11,'Session is checked before connecting and before every one of the ten STEP actions');
   let messages=await page.evaluate(()=>window.__neighborMessages),prepared=messages.find(message=>message.type==='PREPARE');
